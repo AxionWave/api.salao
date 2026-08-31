@@ -1,0 +1,44 @@
+name: Deploy VPS
+
+on:
+  push:
+    branches:
+      - production
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-vps-api-salao
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Deploy api.salao
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT }}
+          script_stop: true
+          command_timeout: 40m
+          script: |
+            set -e
+            mkdir -p /opt/enterprise
+            if [ ! -d /opt/enterprise/api.salao/.git ]; then
+              git clone -b production git@github.com:Enteprise-X/api.salao.git /opt/enterprise/api.salao
+            fi
+            cd /opt/enterprise/api.salao
+            git fetch origin production
+            git checkout production
+            git reset --hard origin/production
+            docker compose --env-file /opt/enterprise/.env up -d --build
+            docker exec postgres psql -U postgres -d base -c "CREATE SCHEMA IF NOT EXISTS lyra;" || true
+            if [ -f infra/seed-sistema.sql ]; then
+              docker exec -i postgres psql -U postgres -d base < infra/seed-sistema.sql || true
+            fi
+            cd /opt/enterprise/Gateway
+            docker compose --env-file /opt/enterprise/.env up -d
+            docker compose -f /opt/enterprise/api.salao/docker-compose.yml --env-file /opt/enterprise/.env ps
