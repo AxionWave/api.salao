@@ -17,7 +17,7 @@ Não duplica `usuarios`. O JWT é o **mesmo** emitido pelo oAuth (via Gateway).
 | Peça | Valor |
 |------|--------|
 | Sistema (`core.sistemas.codigo`) | `LYR` |
-| Módulo raiz | `LYR0000000` |
+| Módulo de segurança | `LYRA000000` (legado `LYR0000000`) |
 | Gateway | `/api/salao/**` |
 | Eureka / service id | `salao` |
 | Porta local | `8092` |
@@ -56,10 +56,10 @@ Authorization: Bearer <access_token>
 X-Secret-Token: <FRONTEND_SECRET_TOKEN>
 ```
 
-Sem o módulo `LYR0000000` no JWT → **403**.
+Sem o módulo `LYRA000000` (ou legado `LYR0000000`) no JWT → **403**.
 
 ## O que NÃO fazer
 
 - Novo login / tabela de usuários
 - Chamar Core `:8081` do browser
-- Inventar códigos de módulo fora de `LYR*`
+- Inventar códigos de módulo fora de `LYRA*` / `LYR*`

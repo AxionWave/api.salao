@@ -13,7 +13,7 @@ public sealed class MeController(ICurrentUserAccessor currentUser) : ControllerB
 {
     /// <summary>Smoke: devolve claims do JWT (userId, empresaId, roles, modulos).</summary>
     [HttpGet("me")]
-    [RequireModulo(ModuleCodes.Raiz)]
+    [RequireModulo(ModuleCodes.Raiz, ModuleCodes.RaizLegado)]
     public IActionResult Me()
     {
         var u = currentUser.User;

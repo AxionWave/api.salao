@@ -15,7 +15,8 @@ INSERT INTO core.modulos (nome, descricao, codigo, url, ordem, ativo, data_criac
 SELECT v.nome, v.descricao, v.codigo, v.url, v.ordem, true, NOW(), s.id
 FROM s
 CROSS JOIN (VALUES
-  ('Inicio Lyra', 'Modulo raiz do Lyra (salao)', 'LYR0000000', '/inicio', 0),
+  ('Lyra', 'Modulo de segurança / entrada no Lyra', 'LYRA000000', '/inicio', 0),
+  ('Inicio Lyra', 'Modulo raiz legado (LYR0000000)', 'LYR0000000', '/inicio', 0),
   ('Agenda', 'Agenda e horarios', 'LYR0000001', '/agenda', 1),
   ('Servicos', 'Catalogo de servicos', 'LYR0000002', '/servicos', 2),
   ('Clientes', 'Clientes do salao', 'LYR0000003', '/clientes', 3)
