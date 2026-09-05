@@ -1,10 +1,17 @@
+using System.IdentityModel.Tokens.Jwt;
 using System.Text;
 using Lyra.Infrastructure;
+using Lyra.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Configuration.AddJsonFile(
+    $"appsettings.{builder.Environment.EnvironmentName}.local.json",
+    optional: true,
+    reloadOnChange: true);
 
 builder.Services.AddControllers()
     .AddJsonOptions(o =>
@@ -64,6 +71,15 @@ builder.Services
             NameClaimType = "username",
             RoleClaimType = "roles"
         };
+        if (builder.Environment.IsDevelopment())
+        {
+            // Token vem do oAuth da VPS; a chave local não é a de produção.
+            options.UseSecurityTokenValidators = true;
+            options.TokenValidationParameters.ValidateIssuerSigningKey = false;
+            options.TokenValidationParameters.RequireSignedTokens = false;
+            options.TokenValidationParameters.SignatureValidator = (token, _) =>
+                new JwtSecurityTokenHandler().ReadJwtToken(token);
+        }
     });
 
 builder.Services.AddAuthorization();
@@ -79,6 +95,17 @@ builder.Services.AddCors(o =>
 });
 
 var app = builder.Build();
+
+try
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetService<LyraDbContext>();
+    db?.Database.Migrate();
+}
+catch (Exception ex) when (app.Environment.IsDevelopment())
+{
+    app.Logger.LogWarning(ex, "Schema lyra não migrado (Postgres indisponível).");
+}
 
 if (app.Environment.IsDevelopment())
 {

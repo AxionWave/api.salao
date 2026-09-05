@@ -22,3 +22,8 @@ appsettings.*.local.json
 # OS
 .DS_Store
 Thumbs.db
+
+# SQLite de desenvolvimento local
+*.db
+*.db-shm
+*.db-wal

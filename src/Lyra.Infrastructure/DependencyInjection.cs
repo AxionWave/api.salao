@@ -13,6 +13,7 @@ public static class DependencyInjection
     {
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUserAccessor, HttpCurrentUserAccessor>();
+        services.AddScoped<IServicoService, Lyra.Infrastructure.Services.ServicoService>();
 
         var conn = configuration.GetConnectionString("Default");
         if (!string.IsNullOrWhiteSpace(conn))
