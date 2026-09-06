@@ -14,11 +14,16 @@ public static class DependencyInjection
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUserAccessor, HttpCurrentUserAccessor>();
         services.AddScoped<IServicoService, Lyra.Infrastructure.Services.ServicoService>();
+        services.AddScoped<IClienteService, Lyra.Infrastructure.Services.ClienteService>();
+        services.AddScoped<IProfissionalService, Lyra.Infrastructure.Services.ProfissionalService>();
+        services.AddScoped<IAgendamentoService, Lyra.Infrastructure.Services.AgendamentoService>();
+        services.AddScoped<IPerfilLyraService, Lyra.Infrastructure.Services.PerfilLyraService>();
 
         var conn = configuration.GetConnectionString("Default");
         if (!string.IsNullOrWhiteSpace(conn))
         {
-            services.AddDbContext<LyraDbContext>(o => o.UseNpgsql(conn));
+            services.AddDbContext<LyraDbContext>(o =>
+                o.UseNpgsql(conn, npg => npg.MigrationsHistoryTable("__EFMigrationsHistory", "lyra")));
         }
 
         return services;

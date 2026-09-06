@@ -13,7 +13,8 @@ builder.Configuration.AddJsonFile(
     optional: true,
     reloadOnChange: true);
 
-builder.Services.AddControllers()
+builder.Services.AddScoped<Lyra.API.Exceptions.ApiExceptionFilter>();
+builder.Services.AddControllers(o => o.Filters.Add<Lyra.API.Exceptions.ApiExceptionFilter>())
     .AddJsonOptions(o =>
     {
         o.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;

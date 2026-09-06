@@ -10,6 +10,11 @@ namespace Lyra.Infrastructure.Persistence;
 public sealed class LyraDbContext(DbContextOptions<LyraDbContext> options) : DbContext(options)
 {
     public DbSet<Servico> Servicos => Set<Servico>();
+    public DbSet<Cliente> Clientes => Set<Cliente>();
+    public DbSet<Profissional> Profissionais => Set<Profissional>();
+    public DbSet<Disponibilidade> Disponibilidades => Set<Disponibilidade>();
+    public DbSet<Agendamento> Agendamentos => Set<Agendamento>();
+    public DbSet<AgendamentoItem> AgendamentoItens => Set<AgendamentoItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
