@@ -22,7 +22,8 @@ CROSS JOIN (VALUES
   ('Servicos', 'Catalogo de servicos', 'LYR0000002', '/servicos', 2),
   ('Clientes', 'Clientes do salao', 'LYR0000003', '/clientes', 3),
   ('Profissionais', 'Equipe que atende', 'LYR0000004', '/profissionais', 4),
-  ('Configuracoes', 'Unidade e perfis do Lyra', 'LYR0000005', '/configuracoes', 5)
+  ('Configuracoes', 'Perfis e permissoes do Lyra', 'LYR0000005', '/configuracoes', 5),
+  ('Relatorio financeiro', 'Permissao de relatorio (tela depois)', 'LYR0000006', '/relatorios', 6)
 ) AS v(nome, descricao, codigo, url, ordem)
 WHERE NOT EXISTS (SELECT 1 FROM core.modulos m WHERE m.codigo = v.codigo);
 

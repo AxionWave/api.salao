@@ -13,6 +13,7 @@ public static class ModuleCodes
     public const string Clientes = "LYR0000003";
     public const string Profissionais = "LYR0000004";
     public const string Configuracoes = "LYR0000005";
+    public const string Relatorio = "LYR0000006";
 
     public static readonly string[] Raizes = [Raiz, RaizLegado];
 
@@ -24,6 +25,7 @@ public static class ModuleCodes
         Servicos,
         Clientes,
         Profissionais,
-        Configuracoes
+        Configuracoes,
+        Relatorio
     ];
 }
