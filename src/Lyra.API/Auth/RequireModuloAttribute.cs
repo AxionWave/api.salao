@@ -27,11 +27,10 @@ public sealed class RequireModuloAttribute : Attribute, IAuthorizationFilter
 
         if (Codigos.Length == 0 || !Codigos.Any(user.HasModulo))
         {
-            var lista = string.Join(" ou ", Codigos);
             context.Result = new ObjectResult(new
             {
                 error = "access_denied",
-                message = $"Módulo {lista} não está no token. Peça acesso no ASC e faça login novamente."
+                message = "Você não tem permissão para esta ação. Fale com quem administra a empresa."
             })
             {
                 StatusCode = StatusCodes.Status403Forbidden
