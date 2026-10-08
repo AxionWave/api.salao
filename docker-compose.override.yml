@@ -1,0 +1,10 @@
+# Aplicado automaticamente pelo "docker compose up" (sem -f). Uso local:
+# publica a API em http://localhost:8092 e usa DB_HOST do --env-file
+# (o compose base aponta para o hostname postgres da rede Docker).
+services:
+  salao:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__Default=Host=${DB_HOST:-postgres};Port=${DB_PORT:-5432};Database=${POSTGRES_DB:-base};Username=${DB_USERNAME:-postgres};Password=${DB_PASSWORD};Search Path=lyra
+    ports:
+      - "127.0.0.1:8092:8080"
