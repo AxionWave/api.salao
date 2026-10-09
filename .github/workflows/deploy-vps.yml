@@ -23,7 +23,6 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           passphrase: ${{ secrets.VPS_SSH_PASSPHRASE }}
           port: ${{ secrets.VPS_PORT }}
-          script_stop: true
           command_timeout: 40m
           script: |
             set -e
@@ -44,7 +43,7 @@ jobs:
             status=starting
             for i in $(seq 1 36); do
               status=$(docker inspect -f '{{.State.Health.Status}}' salao 2>/dev/null || echo starting)
-              [ "$status" = "healthy" ] && break
+              if [ "$status" = "healthy" ]; then break; fi
               sleep 5
             done
             if [ "$status" != "healthy" ]; then
