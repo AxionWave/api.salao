@@ -21,6 +21,7 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          passphrase: ${{ secrets.VPS_SSH_PASSPHRASE }}
           port: ${{ secrets.VPS_PORT }}
           script_stop: true
           command_timeout: 40m
@@ -34,10 +35,21 @@ jobs:
             git fetch origin production
             git checkout production
             git reset --hard origin/production
-            docker compose --env-file /opt/enterprise/.env up -d --build
-            docker exec postgres psql -U postgres -d base -c "CREATE SCHEMA IF NOT EXISTS lyra;" || true
+            docker exec postgres psql -U postgres -d base -c "CREATE SCHEMA IF NOT EXISTS lyra;"
+            # O override do repositório é só para a máquina local (Development e porta publicada).
+            docker compose -f docker-compose.yml --env-file /opt/enterprise/.env up -d --build
             if [ -f infra/seed-sistema.sql ]; then
               docker exec -i postgres psql -U postgres -d base < infra/seed-sistema.sql || true
+            fi
+            status=starting
+            for i in $(seq 1 36); do
+              status=$(docker inspect -f '{{.State.Health.Status}}' salao 2>/dev/null || echo starting)
+              [ "$status" = "healthy" ] && break
+              sleep 5
+            done
+            if [ "$status" != "healthy" ]; then
+              docker logs --tail 120 salao
+              exit 1
             fi
             cd /opt/enterprise/Gateway
             docker compose --env-file /opt/enterprise/.env up -d
