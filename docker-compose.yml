@@ -7,11 +7,11 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://+:8080
-      - Jwt__Secret=${JWT_SECRET}
-      - JWT_SECRET=${JWT_SECRET}
+      - "Jwt__Secret=${JWT_SECRET:?JWT_SECRET is required; provide it with --env-file}"
+      - "JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required; provide it with --env-file}"
       - Jwt__Issuer=${JWT_ISSUER}
       - Jwt__Audience=${JWT_AUDIENCE}
-      - ConnectionStrings__Default=Host=postgres;Port=5432;Database=${POSTGRES_DB:-base};Username=${DB_USERNAME:-postgres};Password=${DB_PASSWORD};Search Path=lyra
+      - ConnectionStrings__Default=Host=${DB_HOST:-postgres};Port=${DB_PORT:-5432};Database=${POSTGRES_DB:-base};Username=${DB_USERNAME:-postgres};Password=${DB_PASSWORD};Search Path=lyra
     restart: on-failure:5
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
