@@ -29,7 +29,7 @@ jobs:
             set -e
             mkdir -p /opt/enterprise
             if [ ! -d /opt/enterprise/api.salao/.git ]; then
-              git clone -b production git@github.com:Enteprise-X/api.salao.git /opt/enterprise/api.salao
+              git clone -b production git@github.com:AxionWave/api.salao.git /opt/enterprise/api.salao
             fi
             cd /opt/enterprise/api.salao
             git fetch origin production
