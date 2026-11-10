@@ -26,7 +26,8 @@ public sealed record SalvarServicoRequest(
 
 public sealed record AlterarAtivoRequest(bool Ativo);
 
-public sealed record ProfissionalResumoDto(int Id, string Nome, string Cor);
+/// <param name="Ativo">Inativos só vêm quando ainda estão ligados a algum serviço.</param>
+public sealed record ProfissionalResumoDto(int Id, string Nome, string Cor, bool Ativo = true);
 
 public sealed record ListaServicosResponse(
     IReadOnlyList<ServicoDto> Items,

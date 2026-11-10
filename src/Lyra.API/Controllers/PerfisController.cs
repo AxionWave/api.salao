@@ -9,7 +9,7 @@ namespace Lyra.API.Controllers;
 
 [ApiController]
 [Authorize]
-[RequireModulo(ModuleCodes.Profissionais, ModuleCodes.Configuracoes, ModuleCodes.Raiz, ModuleCodes.RaizLegado)]
+[RequireModulo(ModuleCodes.Profissionais, ModuleCodes.Configuracoes)]
 [Route("api/salao/perfis-acesso")]
 public sealed class PerfisController(IPerfilLyraService perfis, ICurrentUserAccessor currentUser) : ControllerBase
 {

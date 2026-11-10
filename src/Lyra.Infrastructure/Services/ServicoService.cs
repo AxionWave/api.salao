@@ -51,9 +51,11 @@ public sealed class ServicoService(LyraDbContext db) : IServicoService
             .ToListAsync(ct);
 
         var profissionais = await db.Profissionais.AsNoTracking()
-            .Where(p => p.EmpresaId == empresaId && p.Ativo)
-            .OrderBy(p => p.Nome)
-            .Select(p => new ProfissionalResumoDto(p.Id, p.Nome, p.Cor))
+            .Where(p => p.EmpresaId == empresaId
+                && (p.Ativo || db.ServicoProfissionais.Any(v => v.ProfissionalId == p.Id)))
+            .OrderByDescending(p => p.Ativo)
+            .ThenBy(p => p.Nome)
+            .Select(p => new ProfissionalResumoDto(p.Id, p.Nome, p.Cor, p.Ativo))
             .ToListAsync(ct);
 
         return new ListaServicosResponse(itens.Select(Map).ToList(), total, page, pageSize, categorias, profissionais);
