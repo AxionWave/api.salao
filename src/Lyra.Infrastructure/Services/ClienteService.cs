@@ -19,7 +19,7 @@ public sealed class ClienteService(LyraDbContext db) : IClienteService
         CancellationToken ct)
     {
         page = page < 1 ? 1 : page;
-        pageSize = pageSize is < 1 or > 100 ? 10 : pageSize;
+        pageSize = pageSize < 1 ? 10 : Math.Min(pageSize, 100);
 
         var q = db.Clientes.AsNoTracking().Where(c => c.EmpresaId == empresaId);
         if (ativo is bool flag)
@@ -28,12 +28,16 @@ public sealed class ClienteService(LyraDbContext db) : IClienteService
         }
         if (!string.IsNullOrWhiteSpace(busca))
         {
-            var termo = busca.Trim().ToLower();
-            var digitos = SomenteDigitos(termo);
-            q = q.Where(c =>
-                c.Nome.ToLower().Contains(termo)
-                || (c.Email != null && c.Email.ToLower().Contains(termo))
-                || (digitos.Length > 0 && c.Telefone.Contains(digitos)));
+            // Cada palavra precisa aparecer em algum campo: "maria 9988" acha Maria com telefone ...9988.
+            foreach (var palavra in busca.Trim().ToLower().Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(5))
+            {
+                var termo = palavra;
+                var digitos = SomenteDigitos(termo);
+                q = q.Where(c =>
+                    c.Nome.ToLower().Contains(termo)
+                    || (c.Email != null && c.Email.ToLower().Contains(termo))
+                    || (digitos.Length > 0 && c.Telefone.Contains(digitos)));
+            }
         }
 
         var total = await q.CountAsync(ct);

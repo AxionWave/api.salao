@@ -1,6 +1,7 @@
 using Lyra.API.Auth;
 using Lyra.Application.Abstractions;
 using Lyra.Application.Agendamentos;
+using Lyra.Application.Clientes;
 using Lyra.Core.Modules;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -11,8 +12,12 @@ namespace Lyra.API.Controllers;
 [Authorize]
 [RequireModulo(ModuleCodes.Agenda)]
 [Route("api/salao/agendamentos")]
-public sealed class AgendamentosController(IAgendamentoService agendamentos, ICurrentUserAccessor currentUser) : ControllerBase
+public sealed class AgendamentosController(
+    IAgendamentoService agendamentos,
+    IClienteService clientes,
+    ICurrentUserAccessor currentUser) : ControllerBase
 {
+    private const int MaxClientesBusca = 50;
     [HttpGet]
     public async Task<ActionResult<ListaAgendamentosResponse>> Listar(
         [FromQuery] DateTime de,
@@ -34,6 +39,21 @@ public sealed class AgendamentosController(IAgendamentoService agendamentos, ICu
     {
         if (!TryEmpresa(out var empresaId, out var erro)) return erro;
         return Ok(await agendamentos.OpcoesAsync(empresaId, ct));
+    }
+
+    /// <summary>
+    /// Clientes ativos para escolher no agendamento. Liberado para o módulo Agenda,
+    /// sem exigir o módulo Clientes (recepção que só agenda).
+    /// </summary>
+    [HttpGet("clientes")]
+    public async Task<ActionResult<ListaClientesResponse>> Clientes(
+        [FromQuery] string? busca,
+        [FromQuery] int? limite,
+        CancellationToken ct)
+    {
+        if (!TryEmpresa(out var empresaId, out var erro)) return erro;
+        var tamanho = Math.Clamp(limite ?? 20, 1, MaxClientesBusca);
+        return Ok(await clientes.ListarAsync(empresaId, busca, ativo: true, page: 1, pageSize: tamanho, ct));
     }
 
     /// <summary>Horários em que o(s) serviço(s) cabem, por profissional, num dia do calendário da empresa.</summary>

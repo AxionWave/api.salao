@@ -9,6 +9,9 @@ namespace Lyra.Infrastructure.Services;
 public sealed class AgendamentoService(LyraDbContext db) : IAgendamentoService
 {
     private const int MaxIntervaloApos = ServicoService.MaxIntervaloAposMinutos;
+    public const int MaxDiasListagem = 62;
+    private const int ToleranciaPassadoMinutos = 5;
+    private const int InicioAntecipadoMaxMinutos = 60;
 
     public async Task<ListaAgendamentosResponse> ListarAsync(
         int empresaId,
@@ -23,6 +26,10 @@ public sealed class AgendamentoService(LyraDbContext db) : IAgendamentoService
         if (fim <= inicio)
         {
             throw new ArgumentException("O fim do período deve ser depois do início.");
+        }
+        if ((fim - inicio).TotalDays > MaxDiasListagem)
+        {
+            throw new ArgumentException($"O período pode ter no máximo {MaxDiasListagem} dias.");
         }
 
         var q = QueryCompleto(empresaId).Where(a => a.Inicio < fim && a.Fim > inicio);
@@ -89,7 +96,8 @@ public sealed class AgendamentoService(LyraDbContext db) : IAgendamentoService
 
     public async Task<AgendamentoDto> CriarAsync(int empresaId, SalvarAgendamentoRequest request, CancellationToken ct)
     {
-        var v = await ValidarAsync(empresaId, request, ct);
+        var v = await ValidarAsync(empresaId, request, atual: null, ct);
+        GarantirNaoPassado(v.Inicio);
         GarantirAtendeServicos(v.Profissional, v.Servicos);
         await GarantirExpedienteAsync(empresaId, v.Profissional, v.Inicio, v.Fim, ct);
         await GarantirSemBloqueioAsync(empresaId, v.Profissional.Id, v.Inicio, v.Fim, ct);
@@ -124,11 +132,14 @@ public sealed class AgendamentoService(LyraDbContext db) : IAgendamentoService
             throw new InvalidOperationException("Não é possível alterar um agendamento encerrado.");
         }
 
-        var v = await ValidarAsync(empresaId, request, ct);
+        var v = await ValidarAsync(empresaId, request, entidade, ct);
         var mudouProfissional = entidade.ProfissionalId != v.Profissional.Id;
-        var mudouServicos = !entidade.Itens.OrderBy(i => i.Ordem).Select(i => i.ServicoId)
-            .SequenceEqual(v.Servicos.Select(s => s.Id));
+        var mudouServicos = !v.MesmosServicos;
         var mudouHorario = mudouProfissional || entidade.Inicio != v.Inicio || entidade.Fim != v.Fim;
+        if (entidade.Inicio != v.Inicio)
+        {
+            GarantirNaoPassado(v.Inicio);
+        }
         if (mudouProfissional || mudouServicos)
         {
             GarantirAtendeServicos(v.Profissional, v.Servicos);
@@ -150,10 +161,13 @@ public sealed class AgendamentoService(LyraDbContext db) : IAgendamentoService
         entidade.IntervaloAposMinutos = v.IntervaloApos;
         entidade.Observacoes = v.Obs;
         entidade.DataAtualizacao = DateTime.UtcNow;
-        entidade.Itens.Clear();
-        foreach (var item in MontarItens(v.Servicos))
+        if (mudouServicos)
         {
-            entidade.Itens.Add(item);
+            entidade.Itens.Clear();
+            foreach (var item in MontarItens(v.Servicos))
+            {
+                entidade.Itens.Add(item);
+            }
         }
         await db.SaveChangesAsync(ct);
         return (await ObterAsync(empresaId, id, ct))!;
@@ -172,6 +186,18 @@ public sealed class AgendamentoService(LyraDbContext db) : IAgendamentoService
         {
             throw new InvalidOperationException("Esta transição de status não é permitida.");
         }
+        if (novo != entidade.Status)
+        {
+            var agora = DateTime.UtcNow;
+            if ((novo is StatusAgendamento.Concluido or StatusAgendamento.NoShow) && entidade.Inicio > agora)
+            {
+                throw new InvalidOperationException("Só dá para concluir ou marcar falta depois do horário de início.");
+            }
+            if (novo == StatusAgendamento.EmAtendimento && entidade.Inicio > agora.AddMinutes(InicioAntecipadoMaxMinutos))
+            {
+                throw new InvalidOperationException("Só dá para iniciar o atendimento a partir de 1 hora antes do horário marcado.");
+            }
+        }
         entidade.Status = novo;
         entidade.DataAtualizacao = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
@@ -188,7 +214,8 @@ public sealed class AgendamentoService(LyraDbContext db) : IAgendamentoService
             throw new ArgumentException("O passo deve ser entre 5 e 60 minutos.");
         }
 
-        var servicos = await CarregarServicosAsync(empresaId, request.ServicoIds, ct);
+        var servicos = await CarregarServicosAsync(
+            empresaId, request.ServicoIds, ct, permitirInativos: request.IgnorarAgendamentoId is not null);
         var duracao = servicos.Sum(s => s.DuracaoMinutos);
         var intervaloApos = servicos.Max(s => s.IntervaloAposMinutos);
         var fuso = await FusoHorarioEmpresa.ObterAsync(db, empresaId, ct);
@@ -282,33 +309,47 @@ public sealed class AgendamentoService(LyraDbContext db) : IAgendamentoService
         DateTime Inicio,
         DateTime Fim,
         int IntervaloApos,
-        string? Obs);
+        string? Obs,
+        bool MesmosServicos);
 
     private sealed record Ocupacao(int ProfissionalId, DateTime Inicio, DateTime Fim, int IntervaloAposMinutos);
 
-    private async Task<Validado> ValidarAsync(int empresaId, SalvarAgendamentoRequest request, CancellationToken ct)
+    /// <param name="atual">
+    /// Na edição, o agendamento gravado: o que não foi trocado pode estar inativo, e se os serviços
+    /// são os mesmos valem a duração, o preço e o preparo gravados, não os do catálogo atual.
+    /// </param>
+    private async Task<Validado> ValidarAsync(
+        int empresaId,
+        SalvarAgendamentoRequest request,
+        Agendamento? atual,
+        CancellationToken ct)
     {
         var cliente = await db.Clientes.AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == request.ClienteId && c.EmpresaId == empresaId, ct)
             ?? throw new ArgumentException("Cliente não encontrado nesta empresa.");
-        if (!cliente.Ativo)
+        if (!cliente.Ativo && atual?.ClienteId != cliente.Id)
         {
             throw new ArgumentException("Cliente inativo.");
         }
 
-        var servicos = await CarregarServicosAsync(empresaId, request.ServicoIds, ct);
+        var itensAtuais = atual?.Itens.OrderBy(i => i.Ordem).ThenBy(i => i.Id).ToList();
+        var mesmosServicos = itensAtuais is not null
+            && itensAtuais.Select(i => i.ServicoId).SequenceEqual(request.ServicoIds ?? []);
+        var servicos = await CarregarServicosAsync(empresaId, request.ServicoIds, ct, permitirInativos: mesmosServicos);
 
         var profissional = await db.Profissionais.AsNoTracking()
             .Include(p => p.Disponibilidades)
             .FirstOrDefaultAsync(p => p.Id == request.ProfissionalId && p.EmpresaId == empresaId, ct)
             ?? throw new ArgumentException("Profissional não encontrado nesta empresa.");
-        if (!profissional.Ativo)
+        if (!profissional.Ativo && atual?.ProfissionalId != profissional.Id)
         {
             throw new ArgumentException("Profissional inativo.");
         }
 
+        var duracao = mesmosServicos ? itensAtuais!.Sum(i => i.DuracaoMinutos) : servicos.Sum(s => s.DuracaoMinutos);
+        var intervaloApos = mesmosServicos ? atual!.IntervaloAposMinutos : servicos.Max(s => s.IntervaloAposMinutos);
         var inicio = DatasUtc.Normalizar(request.Inicio);
-        var fim = inicio.AddMinutes(servicos.Sum(s => s.DuracaoMinutos));
+        var fim = inicio.AddMinutes(duracao);
         if (fim <= inicio)
         {
             throw new ArgumentException("Horário inválido.");
@@ -320,14 +361,23 @@ public sealed class AgendamentoService(LyraDbContext db) : IAgendamentoService
             throw new ArgumentException("Observações devem ter no máximo 1000 caracteres.");
         }
 
-        return new Validado(cliente, servicos, profissional, inicio, fim, servicos.Max(s => s.IntervaloAposMinutos), obs);
+        return new Validado(cliente, servicos, profissional, inicio, fim, intervaloApos, obs, mesmosServicos);
+    }
+
+    private static void GarantirNaoPassado(DateTime inicio)
+    {
+        if (inicio < DateTime.UtcNow.AddMinutes(-ToleranciaPassadoMinutos))
+        {
+            throw new ArgumentException("Este horário já passou. Escolha um horário a partir de agora.");
+        }
     }
 
     /// <summary>Serviços na ordem pedida (repetições permitidas), todos ativos e da empresa.</summary>
     private async Task<IReadOnlyList<Servico>> CarregarServicosAsync(
         int empresaId,
         IReadOnlyList<int>? servicoIds,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool permitirInativos = false)
     {
         var ids = servicoIds ?? [];
         if (ids.Count == 0)
@@ -351,7 +401,7 @@ public sealed class AgendamentoService(LyraDbContext db) : IAgendamentoService
             {
                 throw new ArgumentException("Serviço não encontrado nesta empresa.");
             }
-            if (!servico.Ativo)
+            if (!servico.Ativo && !permitirInativos)
             {
                 throw new ArgumentException($"O serviço «{servico.Nome}» está inativo.");
             }

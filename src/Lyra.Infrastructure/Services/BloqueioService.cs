@@ -24,6 +24,10 @@ public sealed class BloqueioService(LyraDbContext db) : IBloqueioService
         {
             throw new ArgumentException("O fim do período deve ser depois do início.");
         }
+        if (fim - inicio > DuracaoMaxima)
+        {
+            throw new ArgumentException("O período pode ter no máximo um ano.");
+        }
 
         var q = db.Bloqueios.AsNoTracking()
             .Include(b => b.Profissional)
@@ -80,6 +84,8 @@ public sealed class BloqueioService(LyraDbContext db) : IBloqueioService
         var afetados = await db.Agendamentos.AsNoTracking()
             .Where(a => a.EmpresaId == empresaId
                 && a.Status != StatusAgendamento.Cancelado
+                && a.Status != StatusAgendamento.Concluido
+                && a.Status != StatusAgendamento.NoShow
                 && a.Inicio < fim
                 && a.Fim > inicio
                 && (profissionalId == null || a.ProfissionalId == profissionalId))

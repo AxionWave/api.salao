@@ -50,9 +50,17 @@ builder.Services.AddSwaggerGen(c =>
 
 builder.Services.AddInfrastructure(builder.Configuration);
 
-var jwtSecret = Environment.GetEnvironmentVariable("JWT_SECRET")
-    ?? builder.Configuration["Jwt:Secret"]
-    ?? "defaultSecretKeyForJWTTokenGenerationAndValidation";
+var jwtSecret = new[] { Environment.GetEnvironmentVariable("JWT_SECRET"), builder.Configuration["Jwt:Secret"] }
+    .FirstOrDefault(s => !string.IsNullOrWhiteSpace(s));
+if (string.IsNullOrWhiteSpace(jwtSecret))
+{
+    if (!builder.Environment.IsDevelopment())
+    {
+        throw new InvalidOperationException("Defina JWT_SECRET: a API não sobe sem a chave dos tokens.");
+    }
+    // Em Development a assinatura não é validada (abaixo); a chave só precisa existir.
+    jwtSecret = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(48));
+}
 var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret));
 
 builder.Services

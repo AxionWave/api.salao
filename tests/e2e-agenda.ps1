@@ -280,6 +280,8 @@ $r = Chamar PATCH "/api/salao/agendamentos/$($ag1.id)/status" @{ status = 'confi
 Status 'ST-01' 'Confirmar' $r 200
 $r = Chamar PATCH "/api/salao/agendamentos/$($ag1.id)/status" @{ status = 'concluido' }
 Confere 'ST-04' 'Concluir agendamento futuro é recusado (R-13)' ($r.Status -ge 400) "(veio $($r.Status))"
+$r = Chamar PATCH "/api/salao/agendamentos/$($ag1.id)/status" @{ status = 'no_show' }
+Confere 'ST-04b' 'Falta em agendamento futuro é recusada (R-13)' ($r.Status -ge 400) "(veio $($r.Status))"
 $r = Chamar PATCH "/api/salao/agendamentos/$($ag2.id)/status" @{ status = 'cancelado' }
 Status 'ST-03' 'Cancelar' $r 200
 $r = Chamar PUT "/api/salao/agendamentos/$($ag2.id)" @{ clienteId = $joao.id; profissionalId = $ana.id; servicoIds = @($retorno.id); inicio = $ag2.inicio; observacoes = 'x' }
@@ -340,8 +342,12 @@ $r = Chamar GET '/api/salao/agendamentos/opcoes' $null $tokenRecepcao
 Status 'PM-02' 'Recepção abre a agenda' $r 200
 $r = Chamar GET '/api/salao/servicos' $null $tokenRecepcao
 Status 'PM-03' 'Recepção não lista serviços' $r 403
+$r = Chamar GET "/api/salao/agendamentos/clientes?busca=Maria%20E2E%20$sufixo" $null $tokenRecepcao
+Confere 'PM-04' 'Recepção busca clientes para agendar (R-06)' ($r.Status -eq 200 -and @($r.Json.items).Count -eq 1 -and $r.Json.items[0].id -eq $maria.id) "(veio $($r.Status), $(@($r.Json.items).Count) itens)"
 $r = Chamar GET '/api/salao/clientes?ativo=true' $null $tokenRecepcao
-Confere 'PM-04' 'Recepção consegue listar clientes para agendar (R-06)' ($r.Status -eq 200) "(veio $($r.Status))"
+Status 'PM-04b' 'Recepção continua sem abrir o cadastro de clientes' $r 403
+$r = Chamar GET '/api/salao/agendamentos/clientes?limite=500'
+Confere 'PM-04c' 'Busca da agenda devolve no máximo 50' ($r.Status -eq 200 -and [int]$r.Json.pageSize -eq 50) "(pageSize $($r.Json.pageSize))"
 $r = Chamar POST '/api/salao/bloqueios' @{ profissionalId = $null; inicio = (Utc $sabado '20:00'); fim = (Utc $sabado '21:00'); motivo = 'teste recepção' } $tokenRecepcao
 Status 'PM-04b' 'Recepção cria bloqueio' $r 201
 if ($r.Json) { $null = Chamar DELETE "/api/salao/bloqueios/$($r.Json.bloqueio.id)" $null $tokenRecepcao }
@@ -361,6 +367,9 @@ $r = Chamar GET '/api/salao/agendamentos/opcoes'
 Confere 'S-10b' 'Consulta some das opções' (-not ($r.Json.servicos | Where-Object { $_.id -eq $consulta.id }))
 $r = Chamar PUT "/api/salao/agendamentos/$($ag3.id)" @{ clienteId = $joao.id; profissionalId = $ana.id; servicoIds = @($consulta.id); inicio = $ag3.inicio; observacoes = 'só a observação' }
 Confere 'AG-17' 'Editar observação de agendamento com serviço desativado (R-08)' ($r.Status -eq 200) "(veio $($r.Status): $($r.Json.message))"
+Confere 'AG-17b' 'Preço e duração gravados são mantidos (R-09)' ($r.Status -eq 200 -and [decimal]$r.Json.preco -eq [decimal]$ag3.preco -and $r.Json.fim -eq $ag3.fim) "(preço $($r.Json.preco) / $($ag3.preco))"
+$r = Chamar PUT "/api/salao/agendamentos/$($ag3.id)" @{ clienteId = $joao.id; profissionalId = $ana.id; servicoIds = @($consulta.id, $retorno.id); inicio = $ag3.inicio }
+Confere 'AG-17c' 'Trocar a lista com serviço desativado é recusado' ($r.Status -eq 400 -and $r.Json.message -like '*inativo*') "(veio $($r.Status): $($r.Json.message))"
 $null = Chamar PATCH "/api/salao/servicos/$($consulta.id)/ativo" @{ ativo = $true }
 
 # ---------------------------------------------------------------- Resultado

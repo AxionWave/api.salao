@@ -6,37 +6,26 @@ using Microsoft.AspNetCore.Http;
 
 namespace Lyra.Infrastructure.Auth;
 
+/// <summary>
+/// Usuário vem só das claims do token assinado. Cabeçalhos como X-Empresa-Id ou X-User-Roles
+/// são ignorados: o navegador pode mandá-los com qualquer valor.
+/// </summary>
 public sealed class HttpCurrentUserAccessor(IHttpContextAccessor http) : ICurrentUserAccessor
 {
-    public CurrentUser User => FromPrincipal(http.HttpContext?.User, http.HttpContext);
+    public CurrentUser User => FromPrincipal(http.HttpContext?.User);
 
-    public static CurrentUser FromPrincipal(ClaimsPrincipal? principal, HttpContext? http = null)
+    public static CurrentUser FromPrincipal(ClaimsPrincipal? principal)
     {
         if (principal?.Identity?.IsAuthenticated != true)
         {
             return new CurrentUser(null, null, null, null, [], []);
         }
 
-        var userId = ParseInt(Claim(principal, EnterpriseClaims.UserId)
-            ?? http?.Request.Headers["X-User-Id"].FirstOrDefault());
-        var username = Claim(principal, EnterpriseClaims.Username)
-            ?? principal.Identity?.Name
-            ?? http?.Request.Headers["X-Username"].FirstOrDefault();
-        var email = Claim(principal, EnterpriseClaims.Email)
-            ?? http?.Request.Headers["X-User-Email"].FirstOrDefault();
-        var empresaId = ParseInt(Claim(principal, EnterpriseClaims.EmpresaId)
-            ?? http?.Request.Headers["X-Empresa-Id"].FirstOrDefault());
-
+        var userId = ParseInt(Claim(principal, EnterpriseClaims.UserId));
+        var username = Claim(principal, EnterpriseClaims.Username) ?? principal.Identity?.Name;
+        var email = Claim(principal, EnterpriseClaims.Email);
+        var empresaId = ParseInt(Claim(principal, EnterpriseClaims.EmpresaId));
         var roles = GetList(principal, EnterpriseClaims.Roles);
-        if (roles.Count == 0)
-        {
-            var header = http?.Request.Headers["X-User-Roles"].FirstOrDefault();
-            if (!string.IsNullOrWhiteSpace(header))
-            {
-                roles = header.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            }
-        }
-
         var modulos = GetList(principal, EnterpriseClaims.Modulos);
 
         return new CurrentUser(userId, username, email, empresaId, roles, modulos);
