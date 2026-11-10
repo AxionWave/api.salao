@@ -26,6 +26,16 @@ public static class DependencyInjection
         services.Configure<NotificacoesOptions>(configuration.GetSection(NotificacoesOptions.Secao));
         services.AddScoped<FilaNotificacoes>();
         services.AddScoped<ProcessadorNotificacoes>();
+        services.AddScoped<LeitorEmpresa>();
+        services.AddSingleton<LinksPublicos>();
+        services.AddScoped<IAgendamentoPublicoService, AgendamentoPublicoService>();
+
+        services.Configure<EmailOptions>(configuration.GetSection(EmailOptions.Secao));
+        if (!string.IsNullOrWhiteSpace(configuration[EmailOptions.Secao + ":ApiKey"]))
+        {
+            services.AddHttpClient<CanalEmail>(c => c.Timeout = TimeSpan.FromSeconds(20));
+            services.AddScoped<ICanalNotificacao>(sp => sp.GetRequiredService<CanalEmail>());
+        }
         if (configuration.GetValue(NotificacoesOptions.Secao + ":Worker", true))
         {
             services.AddHostedService<WorkerNotificacoes>();

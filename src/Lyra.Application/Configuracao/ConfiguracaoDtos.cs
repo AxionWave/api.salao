@@ -18,13 +18,15 @@ public sealed record ConfiguracaoEmpresaDto(
     string FusoHorario,
     TerminologiaDto Terminologia,
     bool Personalizada,
-    DateTime? DataAtualizacao);
+    DateTime? DataAtualizacao,
+    bool EnviarEmails = false);
 
-/// <summary>Terminologia nula = usa a do segmento.</summary>
+/// <summary>Terminologia nula = usa a do segmento. EnviarEmails nulo = mantém o atual.</summary>
 public sealed record SalvarConfiguracaoRequest(
     string Segmento,
     string FusoHorario,
-    TerminologiaDto? Terminologia);
+    TerminologiaDto? Terminologia,
+    bool? EnviarEmails = null);
 
 public sealed record OpcoesConfiguracaoResponse(
     IReadOnlyList<SegmentoDto> Segmentos,

@@ -14,6 +14,7 @@ public sealed class EmpresaConfigConfiguration : IEntityTypeConfiguration<Empres
         builder.Property(x => x.Segmento).HasColumnName("segmento").HasMaxLength(30).IsRequired();
         builder.Property(x => x.FusoHorario).HasColumnName("fuso_horario").HasMaxLength(60).IsRequired();
         builder.Property(x => x.Terminologia).HasColumnName("terminologia").HasColumnType("jsonb");
+        builder.Property(x => x.EnviarEmails).HasColumnName("enviar_emails").HasDefaultValue(false);
         builder.Property(x => x.DataCriacao).HasColumnName("data_criacao").IsRequired();
         builder.Property(x => x.DataAtualizacao).HasColumnName("data_atualizacao");
     }

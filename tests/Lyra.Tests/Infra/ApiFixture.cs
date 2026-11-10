@@ -48,14 +48,36 @@ public sealed class ApiFixture : IAsyncLifetime
         Environment.SetEnvironmentVariable("JWT_SECRET", Segredo);
         Environment.SetEnvironmentVariable("Notificacoes__Worker", "false");
         Environment.SetEnvironmentVariable("Notificacoes__Canais__0", CanalTeste.NomeCanal);
+        Environment.SetEnvironmentVariable("Notificacoes__Canais__1", CanalEmail.NomeCanal);
+        Environment.SetEnvironmentVariable("Email__ApiKey", "re_teste");
+        Environment.SetEnvironmentVariable("Email__UrlApi", "http://resend.falso");
+        Environment.SetEnvironmentVariable("Email__UrlPublica", UrlPublica);
+
+        // O cadastro de empresas é do Core; aqui só as colunas que o Lyra lê.
+        await ExecutarNoBanco("""
+            CREATE SCHEMA core;
+            CREATE TABLE core.empresas (
+                id integer PRIMARY KEY, razao_social varchar(200) NOT NULL, nome_fantasia varchar(200),
+                email varchar(200), telefone varchar(40), endereco varchar(200), cidade varchar(100), estado varchar(2));
+            """);
 
         factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b => b
             .UseEnvironment("Testing")
-            .ConfigureServices(s => s.AddSingleton<ICanalNotificacao>(Canal)));
+            .ConfigureServices(s =>
+            {
+                s.AddSingleton<ICanalNotificacao>(Canal);
+                s.AddHttpClient<CanalEmail>().ConfigurePrimaryHttpMessageHandler(() => Resend);
+            }));
         _ = factory.Server;
     }
 
+    public const string UrlPublica = "https://lyra.teste";
+
     public CanalTeste Canal { get; } = new();
+
+    public ResendFalso Resend { get; } = new();
+
+    public Task ExecutarNoBanco(string sql, params object[] parametros) => Executar(banco!, sql, parametros);
 
     public HttpClient NovoHttp() => factory?.CreateClient()
         ?? throw new InvalidOperationException("A API de testes não subiu.");
@@ -79,12 +101,16 @@ public sealed class ApiFixture : IAsyncLifetime
         await ExecutarNoServidor($"DROP DATABASE IF EXISTS \"{banco}\" WITH (FORCE)");
     }
 
-    private async Task ExecutarNoServidor(string sql)
+    private Task ExecutarNoServidor(string sql) => Executar("postgres", sql);
+
+    /// <summary>Parâmetros posicionais: <c>$1</c>, <c>$2</c>…</summary>
+    private async Task Executar(string nomeBanco, string sql, params object[] parametros)
     {
-        var admin = new NpgsqlConnectionStringBuilder(servidor!.ConnectionString) { Database = "postgres" };
-        await using var conexao = new NpgsqlConnection(admin.ConnectionString);
+        var alvo = new NpgsqlConnectionStringBuilder(servidor!.ConnectionString) { Database = nomeBanco };
+        await using var conexao = new NpgsqlConnection(alvo.ConnectionString);
         await conexao.OpenAsync();
         await using var comando = new NpgsqlCommand(sql, conexao);
+        foreach (var p in parametros) comando.Parameters.Add(new NpgsqlParameter { Value = p });
         await comando.ExecuteNonQueryAsync();
     }
 }

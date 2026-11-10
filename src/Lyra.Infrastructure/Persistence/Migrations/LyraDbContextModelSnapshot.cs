@@ -318,6 +318,12 @@ namespace Lyra.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("data_criacao");
 
+                    b.Property<bool>("EnviarEmails")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("enviar_emails");
+
                     b.Property<string>("FusoHorario")
                         .IsRequired()
                         .HasMaxLength(60)

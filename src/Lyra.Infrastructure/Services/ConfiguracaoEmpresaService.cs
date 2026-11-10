@@ -51,6 +51,7 @@ public sealed class ConfiguracaoEmpresaService(LyraDbContext db) : IConfiguracao
         entidade.Segmento = segmento.Id;
         entidade.FusoHorario = fuso;
         entidade.Terminologia = terminologia;
+        if (request.EnviarEmails is bool enviar) entidade.EnviarEmails = enviar;
 
         await db.SaveChangesAsync(ct);
         return Map(entidade);
@@ -65,7 +66,8 @@ public sealed class ConfiguracaoEmpresaService(LyraDbContext db) : IConfiguracao
             e?.FusoHorario ?? Segmentos.FusoPadrao,
             personalizada ?? segmento.Terminologia,
             personalizada is not null,
-            e?.DataAtualizacao ?? e?.DataCriacao);
+            e?.DataAtualizacao ?? e?.DataCriacao,
+            e?.EnviarEmails ?? false);
     }
 
     private static TerminologiaDto? Ler(string? json)

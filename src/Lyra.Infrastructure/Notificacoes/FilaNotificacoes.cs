@@ -18,6 +18,8 @@ public sealed class FilaNotificacoes(
     IEnumerable<ICanalNotificacao> canais,
     IOptions<NotificacoesOptions> opcoes)
 {
+    public const string OrigemCliente = "cliente";
+
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private static readonly CultureInfo PtBr = CultureInfo.GetCultureInfo("pt-BR");
 
@@ -26,11 +28,17 @@ public sealed class FilaNotificacoes(
         string evento,
         CancellationToken ct,
         DateTime? inicioAnterior = null,
-        string? motivo = null)
+        string? motivo = null,
+        string? origem = null)
     {
-        var ativos = canais
+        var ligados = canais
             .Where(c => opcoes.Value.Canais.Contains(c.Nome, StringComparer.OrdinalIgnoreCase))
             .ToList();
+        if (ligados.Count == 0) return;
+
+        var config = await db.EmpresaConfigs.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.EmpresaId == agendamento.EmpresaId, ct);
+        var ativos = ligados.Where(c => c.Aceita(evento, origem, config)).ToList();
         if (ativos.Count == 0) return;
 
         if (agendamento.Itens.Count == 0 && db.Entry(agendamento).State != EntityState.Added)
@@ -48,17 +56,20 @@ public sealed class FilaNotificacoes(
             .ToDictionaryAsync(s => s.Id, s => s.Nome, ct);
         var fuso = await FusoHorarioEmpresa.ObterAsync(db, agendamento.EmpresaId, ct);
 
-        var dados = JsonSerializer.Serialize(new
+        var dados = JsonSerializer.Serialize(new DadosNotificacao
         {
-            cliente = cliente.Nome,
-            profissional,
-            servicos = servicoIds.Where(nomes.ContainsKey).Select(id => nomes[id]).ToList(),
-            inicio = agendamento.Inicio,
-            inicioLocal = Local(agendamento.Inicio, fuso),
-            inicioAnterior,
-            inicioAnteriorLocal = inicioAnterior is DateTime ant ? Local(ant, fuso) : null,
-            fuso = fuso.Id,
-            motivo,
+            Cliente = cliente.Nome,
+            Profissional = profissional,
+            Servicos = servicoIds.Where(nomes.ContainsKey).Select(id => nomes[id]).ToList(),
+            Inicio = agendamento.Inicio,
+            Fim = agendamento.Fim,
+            InicioLocal = Local(agendamento.Inicio, fuso),
+            InicioAnterior = inicioAnterior,
+            InicioAnteriorLocal = inicioAnterior is DateTime ant ? Local(ant, fuso) : null,
+            Fuso = fuso.Id,
+            Motivo = motivo,
+            Origem = origem,
+            Cadeia = await CadeiaAsync(agendamento, ct),
         }, Json);
 
         var agora = DateTime.UtcNow;
@@ -82,7 +93,44 @@ public sealed class FilaNotificacoes(
         }
     }
 
+    public static DadosNotificacao LerDados(string json) =>
+        JsonSerializer.Deserialize<DadosNotificacao>(json, Json) ?? new DadosNotificacao();
+
+    /// <summary>Primeiro agendamento da cadeia de remarcações: o calendário do cliente trata todos como o mesmo evento.</summary>
+    private async Task<int> CadeiaAsync(Agendamento agendamento, CancellationToken ct)
+    {
+        var anterior = agendamento.RemarcadoDeId;
+        var raiz = agendamento.Id;
+        for (var passos = 0; anterior is int id && passos < 50; passos++)
+        {
+            raiz = id;
+            anterior = await db.Agendamentos.AsNoTracking()
+                .Where(a => a.Id == id)
+                .Select(a => a.RemarcadoDeId)
+                .FirstOrDefaultAsync(ct);
+        }
+        return raiz;
+    }
+
     private static string Local(DateTime utc, TimeZoneInfo fuso) =>
         TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), fuso)
             .ToString("dd/MM/yyyy HH:mm", PtBr);
+}
+
+/// <summary>O que a mensagem precisa saber do agendamento, congelado no momento do evento.</summary>
+public sealed class DadosNotificacao
+{
+    public string Cliente { get; init; } = "";
+    public string Profissional { get; init; } = "";
+    public List<string> Servicos { get; init; } = [];
+    public DateTime Inicio { get; init; }
+    public DateTime Fim { get; init; }
+    public string InicioLocal { get; init; } = "";
+    public DateTime? InicioAnterior { get; init; }
+    public string? InicioAnteriorLocal { get; init; }
+    public string Fuso { get; init; } = "";
+    public string? Motivo { get; init; }
+    public string? Origem { get; init; }
+    /// <summary>Id do primeiro agendamento da cadeia de remarcações (0 quando ainda não salvo).</summary>
+    public int Cadeia { get; init; }
 }

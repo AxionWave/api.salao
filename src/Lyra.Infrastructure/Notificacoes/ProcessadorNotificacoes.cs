@@ -66,6 +66,10 @@ public sealed class ProcessadorNotificacoes(
             item.DataEnvio = DateTime.UtcNow;
             item.UltimoErro = null;
         }
+        catch (NotificacaoRecusadaException ex)
+        {
+            Falhar(item, ex.Message, definitivo: true, ex);
+        }
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             Falhar(item, ex.Message, definitivo: item.Tentativas > Esperas.Length, ex);
