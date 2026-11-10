@@ -62,6 +62,11 @@ namespace Lyra.Infrastructure.Persistence.Migrations
                         .HasDefaultValue(0)
                         .HasColumnName("intervalo_apos_minutos");
 
+                    b.Property<string>("MotivoCancelamento")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("motivo_cancelamento");
+
                     b.Property<string>("Observacoes")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)")
@@ -70,6 +75,10 @@ namespace Lyra.Infrastructure.Persistence.Migrations
                     b.Property<int>("ProfissionalId")
                         .HasColumnType("integer")
                         .HasColumnName("profissional_id");
+
+                    b.Property<int?>("RemarcadoDeId")
+                        .HasColumnType("integer")
+                        .HasColumnName("remarcado_de_id");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -85,6 +94,9 @@ namespace Lyra.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_agendamentos_empresa_id");
 
                     b.HasIndex("ProfissionalId");
+
+                    b.HasIndex("RemarcadoDeId")
+                        .HasDatabaseName("ix_agendamentos_remarcado_de_id");
 
                     b.HasIndex("EmpresaId", "Inicio")
                         .HasDatabaseName("ix_agendamentos_empresa_inicio");
@@ -212,6 +224,10 @@ namespace Lyra.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("empresa_id");
 
+                    b.Property<int?>("FamiliaId")
+                        .HasColumnType("integer")
+                        .HasColumnName("familia_id");
+
                     b.Property<string>("Nome")
                         .IsRequired()
                         .HasMaxLength(120)
@@ -222,6 +238,11 @@ namespace Lyra.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)")
                         .HasColumnName("observacoes");
+
+                    b.Property<string>("Parentesco")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("parentesco");
 
                     b.Property<string>("Telefone")
                         .IsRequired()
@@ -234,14 +255,15 @@ namespace Lyra.Infrastructure.Persistence.Migrations
                     b.HasIndex("EmpresaId")
                         .HasDatabaseName("ix_clientes_empresa_id");
 
+                    b.HasIndex("FamiliaId")
+                        .HasDatabaseName("ix_clientes_familia_id");
+
                     b.HasIndex("EmpresaId", "Email")
-                        .IsUnique()
-                        .HasDatabaseName("ux_clientes_empresa_email")
+                        .HasDatabaseName("ix_clientes_empresa_email")
                         .HasFilter("email IS NOT NULL");
 
                     b.HasIndex("EmpresaId", "Telefone")
-                        .IsUnique()
-                        .HasDatabaseName("ux_clientes_empresa_telefone");
+                        .HasDatabaseName("ix_clientes_empresa_telefone");
 
                     b.ToTable("clientes", "lyra");
                 });
@@ -315,6 +337,37 @@ namespace Lyra.Infrastructure.Persistence.Migrations
                     b.HasKey("EmpresaId");
 
                     b.ToTable("empresa_config", "lyra");
+                });
+
+            modelBuilder.Entity("Lyra.Infrastructure.Persistence.Entities.Familia", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("DataCriacao")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("data_criacao");
+
+                    b.Property<int>("EmpresaId")
+                        .HasColumnType("integer")
+                        .HasColumnName("empresa_id");
+
+                    b.Property<string>("Nome")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("nome");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EmpresaId")
+                        .HasDatabaseName("ix_familias_empresa_id");
+
+                    b.ToTable("familias", "lyra");
                 });
 
             modelBuilder.Entity("Lyra.Infrastructure.Persistence.Entities.Profissional", b =>
@@ -470,6 +523,11 @@ namespace Lyra.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("Lyra.Infrastructure.Persistence.Entities.Agendamento", null)
+                        .WithMany()
+                        .HasForeignKey("RemarcadoDeId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("Cliente");
 
                     b.Navigation("Profissional");
@@ -502,6 +560,16 @@ namespace Lyra.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("Profissional");
+                });
+
+            modelBuilder.Entity("Lyra.Infrastructure.Persistence.Entities.Cliente", b =>
+                {
+                    b.HasOne("Lyra.Infrastructure.Persistence.Entities.Familia", "Familia")
+                        .WithMany("Membros")
+                        .HasForeignKey("FamiliaId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Familia");
                 });
 
             modelBuilder.Entity("Lyra.Infrastructure.Persistence.Entities.Disponibilidade", b =>
@@ -537,6 +605,11 @@ namespace Lyra.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Lyra.Infrastructure.Persistence.Entities.Agendamento", b =>
                 {
                     b.Navigation("Itens");
+                });
+
+            modelBuilder.Entity("Lyra.Infrastructure.Persistence.Entities.Familia", b =>
+                {
+                    b.Navigation("Membros");
                 });
 
             modelBuilder.Entity("Lyra.Infrastructure.Persistence.Entities.Profissional", b =>

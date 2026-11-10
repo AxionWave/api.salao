@@ -25,7 +25,9 @@ public sealed record AgendamentoDto(
     string? Observacoes,
     DateTime DataCriacao,
     DateTime? DataAtualizacao,
-    int IntervaloAposMinutos);
+    int IntervaloAposMinutos,
+    int? RemarcadoDeId,
+    string? MotivoCancelamento);
 
 public sealed record SalvarAgendamentoRequest(
     int ClienteId,
@@ -34,7 +36,8 @@ public sealed record SalvarAgendamentoRequest(
     DateTime Inicio,
     string? Observacoes);
 
-public sealed record AlterarStatusRequest(string Status);
+/// <param name="Motivo">Opcional, guardado ao cancelar.</param>
+public sealed record AlterarStatusRequest(string Status, string? Motivo = null);
 
 public sealed record ProfissionalAgendaDto(
     int Id,

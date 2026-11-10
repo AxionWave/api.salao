@@ -12,6 +12,9 @@ public sealed class Agendamento
     public int IntervaloAposMinutos { get; set; }
     public string Status { get; set; } = "agendado";
     public string? Observacoes { get; set; }
+    /// <summary>Agendamento que este substituiu ao remarcar.</summary>
+    public int? RemarcadoDeId { get; set; }
+    public string? MotivoCancelamento { get; set; }
     public DateTime DataCriacao { get; set; } = DateTime.UtcNow;
     public DateTime? DataAtualizacao { get; set; }
 

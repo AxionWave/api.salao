@@ -4,7 +4,6 @@ using Lyra.Application.Clientes;
 using Lyra.Infrastructure.Persistence;
 using Lyra.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
-using Npgsql;
 
 namespace Lyra.Infrastructure.Services;
 
@@ -21,7 +20,7 @@ public sealed class ClienteService(LyraDbContext db) : IClienteService
         page = page < 1 ? 1 : page;
         pageSize = pageSize < 1 ? 10 : Math.Min(pageSize, 100);
 
-        var q = db.Clientes.AsNoTracking().Where(c => c.EmpresaId == empresaId);
+        var q = db.Clientes.AsNoTracking().Include(c => c.Familia).Where(c => c.EmpresaId == empresaId);
         if (ativo is bool flag)
         {
             q = q.Where(c => c.Ativo == flag);
@@ -54,6 +53,7 @@ public sealed class ClienteService(LyraDbContext db) : IClienteService
     public async Task<ClienteDto?> ObterAsync(int empresaId, int id, CancellationToken ct)
     {
         var c = await db.Clientes.AsNoTracking()
+            .Include(x => x.Familia)
             .FirstOrDefaultAsync(x => x.Id == id && x.EmpresaId == empresaId, ct);
         return c is null ? null : Map(c);
     }
@@ -62,10 +62,12 @@ public sealed class ClienteService(LyraDbContext db) : IClienteService
     {
         var entidade = new Cliente { EmpresaId = empresaId };
         Aplicar(entidade, request);
+        await AplicarFamiliaAsync(entidade, request, ct);
+        await GarantirContatoLivreAsync(entidade, ct);
         entidade.DataCriacao = DateTime.UtcNow;
         db.Clientes.Add(entidade);
-        await SalvarAsync(ct);
-        return Map(entidade);
+        await db.SaveChangesAsync(ct);
+        return (await ObterAsync(empresaId, entidade.Id, ct))!;
     }
 
     public async Task<ClienteDto> AtualizarAsync(int empresaId, int id, SalvarClienteRequest request, CancellationToken ct)
@@ -73,9 +75,11 @@ public sealed class ClienteService(LyraDbContext db) : IClienteService
         var entidade = await db.Clientes.FirstOrDefaultAsync(x => x.Id == id && x.EmpresaId == empresaId, ct)
             ?? throw new KeyNotFoundException("Cliente não encontrado.");
         Aplicar(entidade, request);
+        await AplicarFamiliaAsync(entidade, request, ct);
+        await GarantirContatoLivreAsync(entidade, ct);
         entidade.DataAtualizacao = DateTime.UtcNow;
-        await SalvarAsync(ct);
-        return Map(entidade);
+        await db.SaveChangesAsync(ct);
+        return (await ObterAsync(empresaId, id, ct))!;
     }
 
     public async Task<ClienteDto> AlterarAtivoAsync(int empresaId, int id, bool ativo, CancellationToken ct)
@@ -84,35 +88,115 @@ public sealed class ClienteService(LyraDbContext db) : IClienteService
             ?? throw new KeyNotFoundException("Cliente não encontrado.");
         entidade.Ativo = ativo;
         entidade.DataAtualizacao = DateTime.UtcNow;
-        await SalvarAsync(ct);
-        return Map(entidade);
+        await db.SaveChangesAsync(ct);
+        return (await ObterAsync(empresaId, id, ct))!;
     }
 
-    private async Task SalvarAsync(CancellationToken ct)
+    public async Task<IReadOnlyList<ClienteDto>> FamiliaAsync(int empresaId, int id, CancellationToken ct)
     {
-        try
+        var cliente = await db.Clientes.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == id && x.EmpresaId == empresaId, ct)
+            ?? throw new KeyNotFoundException("Cliente não encontrado.");
+        if (cliente.FamiliaId is not int familiaId)
         {
-            await db.SaveChangesAsync(ct);
+            return [];
         }
-        catch (DbUpdateException ex) when (IsUniqueViolation(ex, out var constraint))
+        var membros = await db.Clientes.AsNoTracking()
+            .Include(x => x.Familia)
+            .Where(x => x.EmpresaId == empresaId && x.FamiliaId == familiaId)
+            .OrderBy(x => x.Nome)
+            .ToListAsync(ct);
+        return membros.Select(Map).ToList();
+    }
+
+    public async Task<IReadOnlyList<ClienteDto>> MesmoContatoAsync(
+        int empresaId,
+        string? telefone,
+        string? email,
+        int? ignorarId,
+        CancellationToken ct)
+    {
+        var tel = SomenteDigitos(telefone);
+        var mail = string.IsNullOrWhiteSpace(email) ? null : email.Trim().ToLowerInvariant();
+        if (tel.Length < 10 && mail is null)
         {
-            if (constraint.Contains("email", StringComparison.OrdinalIgnoreCase))
+            return [];
+        }
+        var q = db.Clientes.AsNoTracking()
+            .Include(x => x.Familia)
+            .Where(x => x.EmpresaId == empresaId && ((tel.Length >= 10 && x.Telefone == tel) || (mail != null && x.Email == mail)));
+        if (ignorarId is int ignorar)
+        {
+            q = q.Where(x => x.Id != ignorar);
+        }
+        var itens = await q.OrderBy(x => x.Nome).Take(20).ToListAsync(ct);
+        return itens.Select(Map).ToList();
+    }
+
+    private async Task AplicarFamiliaAsync(Cliente entidade, SalvarClienteRequest request, CancellationToken ct)
+    {
+        if (request.SairDaFamilia)
+        {
+            entidade.FamiliaId = null;
+            entidade.Familia = null;
+            entidade.Parentesco = null;
+            return;
+        }
+        if (request.FamiliaDeClienteId is not int outroId)
+        {
+            return;
+        }
+        if (outroId == entidade.Id)
+        {
+            throw new ArgumentException("Escolha outro cliente para formar a família.");
+        }
+
+        var outro = await db.Clientes.Include(x => x.Familia)
+            .FirstOrDefaultAsync(x => x.Id == outroId && x.EmpresaId == entidade.EmpresaId, ct)
+            ?? throw new ArgumentException("Cliente da família não encontrado.");
+        if (outro.Familia is null)
+        {
+            outro.Familia = new Familia
             {
-                throw new InvalidOperationException("Já existe um cliente com este e-mail nesta empresa.");
+                EmpresaId = entidade.EmpresaId,
+                Nome = NomeFamilia(outro.Nome),
+                DataCriacao = DateTime.UtcNow,
+            };
+        }
+        entidade.Familia = outro.Familia;
+    }
+
+    /// <summary>Telefone e e-mail só podem se repetir entre membros da mesma família.</summary>
+    private async Task GarantirContatoLivreAsync(Cliente entidade, CancellationToken ct)
+    {
+        var familiaId = entidade.Familia?.Id ?? entidade.FamiliaId;
+        // Família recém-criada ainda não tem Id: os membros são as fichas já ligadas a ela em memória.
+        var membrosNovaFamilia = entidade.Familia is { Id: 0 } nova
+            ? db.ChangeTracker.Entries<Cliente>().Where(e => e.Entity.Familia == nova).Select(e => e.Entity.Id).ToHashSet()
+            : [];
+        var conflitos = await db.Clientes.AsNoTracking()
+            .Where(x => x.EmpresaId == entidade.EmpresaId
+                && x.Id != entidade.Id
+                && (x.Telefone == entidade.Telefone || (entidade.Email != null && x.Email == entidade.Email)))
+            .Select(x => new { x.Id, x.Nome, x.Telefone, x.FamiliaId })
+            .ToListAsync(ct);
+        foreach (var c in conflitos)
+        {
+            if ((familiaId is > 0 && c.FamiliaId == familiaId) || membrosNovaFamilia.Contains(c.Id))
+            {
+                continue;
             }
-            throw new InvalidOperationException("Já existe um cliente com este telefone nesta empresa.");
+            var campo = c.Telefone == entidade.Telefone ? "telefone" : "e-mail";
+            throw new InvalidOperationException(
+                $"{c.Nome} já usa este {campo}. Para repetir o {campo}, inclua as duas fichas na mesma família.");
         }
     }
 
-    private static bool IsUniqueViolation(DbUpdateException ex, out string constraint)
+    private static string NomeFamilia(string nome)
     {
-        constraint = string.Empty;
-        if (ex.InnerException is PostgresException pg && pg.SqlState == PostgresErrorCodes.UniqueViolation)
-        {
-            constraint = pg.ConstraintName ?? string.Empty;
-            return true;
-        }
-        return ex.InnerException?.Message.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase) ?? false;
+        var partes = nome.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var sobrenome = partes.Length > 1 ? partes[^1] : partes.FirstOrDefault() ?? "Sem nome";
+        return $"Família {sobrenome}";
     }
 
     private static void Aplicar(Cliente entidade, SalvarClienteRequest request)
@@ -149,11 +233,18 @@ public sealed class ClienteService(LyraDbContext db) : IClienteService
             throw new ArgumentException("Observações devem ter no máximo 1000 caracteres.");
         }
 
+        var parentesco = string.IsNullOrWhiteSpace(request.Parentesco) ? null : request.Parentesco.Trim();
+        if (parentesco is { Length: > 40 })
+        {
+            throw new ArgumentException("Parentesco deve ter no máximo 40 caracteres.");
+        }
+
         entidade.Nome = nome;
         entidade.Telefone = telefone;
         entidade.Email = email;
         entidade.Observacoes = obs;
         entidade.Ativo = request.Ativo;
+        entidade.Parentesco = parentesco;
     }
 
     private static string SomenteDigitos(string? valor) =>
@@ -173,6 +264,9 @@ public sealed class ClienteService(LyraDbContext db) : IClienteService
         c.Email,
         c.Observacoes,
         c.Ativo,
+        c.FamiliaId,
+        c.Familia?.Nome,
+        c.Parentesco,
         c.DataCriacao,
         c.DataAtualizacao);
 }

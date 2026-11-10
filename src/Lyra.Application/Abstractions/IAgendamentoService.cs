@@ -20,7 +20,13 @@ public interface IAgendamentoService
 
     Task<AgendamentoDto> AtualizarAsync(int empresaId, int id, SalvarAgendamentoRequest request, CancellationToken ct);
 
-    Task<AgendamentoDto> AlterarStatusAsync(int empresaId, int id, string status, CancellationToken ct);
+    Task<AgendamentoDto> AlterarStatusAsync(int empresaId, int id, string status, string? motivo, CancellationToken ct);
+
+    /// <summary>
+    /// Marca um novo horário para o mesmo cliente. Se o original ainda estava em aberto, é cancelado
+    /// junto; se foi falta ou cancelamento, fica como está. Devolve o novo agendamento.
+    /// </summary>
+    Task<AgendamentoDto> RemarcarAsync(int empresaId, int id, SalvarAgendamentoRequest request, CancellationToken ct);
 
     Task<HorariosLivresResponse> HorariosLivresAsync(int empresaId, HorariosLivresRequest request, CancellationToken ct);
 }

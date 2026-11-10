@@ -110,7 +110,18 @@ public sealed class AgendamentosController(
         CancellationToken ct)
     {
         if (!TryEmpresa(out var empresaId, out var erro)) return erro;
-        return Ok(await agendamentos.AlterarStatusAsync(empresaId, id, request.Status, ct));
+        return Ok(await agendamentos.AlterarStatusAsync(empresaId, id, request.Status, request.Motivo, ct));
+    }
+
+    [HttpPost("{id:int}/remarcar")]
+    public async Task<ActionResult<AgendamentoDto>> Remarcar(
+        int id,
+        [FromBody] SalvarAgendamentoRequest request,
+        CancellationToken ct)
+    {
+        if (!TryEmpresa(out var empresaId, out var erro)) return erro;
+        var novo = await agendamentos.RemarcarAsync(empresaId, id, request, ct);
+        return CreatedAtAction(nameof(Obter), new { id = novo.Id }, novo);
     }
 
     private bool TryEmpresa(out int empresaId, out ActionResult erro)

@@ -19,6 +19,13 @@ public sealed class AgendamentoConfiguration : IEntityTypeConfiguration<Agendame
         builder.Property(x => x.IntervaloAposMinutos).HasColumnName("intervalo_apos_minutos").HasDefaultValue(0).IsRequired();
         builder.Property(x => x.Status).HasColumnName("status").HasMaxLength(20).IsRequired();
         builder.Property(x => x.Observacoes).HasColumnName("observacoes").HasMaxLength(1000);
+        builder.Property(x => x.RemarcadoDeId).HasColumnName("remarcado_de_id");
+        builder.Property(x => x.MotivoCancelamento).HasColumnName("motivo_cancelamento").HasMaxLength(200);
+        builder.HasIndex(x => x.RemarcadoDeId).HasDatabaseName("ix_agendamentos_remarcado_de_id");
+        builder.HasOne<Agendamento>()
+            .WithMany()
+            .HasForeignKey(x => x.RemarcadoDeId)
+            .OnDelete(DeleteBehavior.SetNull);
         builder.Property(x => x.DataCriacao).HasColumnName("data_criacao").IsRequired();
         builder.Property(x => x.DataAtualizacao).HasColumnName("data_atualizacao");
 

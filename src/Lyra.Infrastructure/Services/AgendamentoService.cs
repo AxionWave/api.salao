@@ -98,12 +98,56 @@ public sealed class AgendamentoService(LyraDbContext db) : IAgendamentoService
     public async Task<AgendamentoDto> CriarAsync(int empresaId, SalvarAgendamentoRequest request, CancellationToken ct)
     {
         var v = await ValidarAsync(empresaId, request, atual: null, ct);
+        await using var tx = await TravarAgendaAsync(empresaId, v.Profissional.Id, ct);
+        var entidade = await NovoAgendamentoAsync(empresaId, v, ignorarId: null, remarcadoDeId: null, ct);
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        return (await ObterAsync(empresaId, entidade.Id, ct))!;
+    }
+
+    public async Task<AgendamentoDto> RemarcarAsync(int empresaId, int id, SalvarAgendamentoRequest request, CancellationToken ct)
+    {
+        var original = await db.Agendamentos.FirstOrDefaultAsync(x => x.Id == id && x.EmpresaId == empresaId, ct)
+            ?? throw new KeyNotFoundException("Agendamento não encontrado.");
+        if (original.Status is StatusAgendamento.EmAtendimento or StatusAgendamento.Concluido)
+        {
+            throw new InvalidOperationException("Atendimento iniciado ou concluído não pode ser remarcado.");
+        }
+        var jaRemarcado = await db.Agendamentos.AnyAsync(
+            x => x.RemarcadoDeId == id && x.Status != StatusAgendamento.Cancelado, ct);
+        if (jaRemarcado)
+        {
+            throw new InvalidOperationException("Este agendamento já foi remarcado. Altere o novo horário.");
+        }
+
+        var emAberto = !StatusAgendamento.Terminal(original.Status);
+        var v = await ValidarAsync(empresaId, request with { ClienteId = original.ClienteId }, atual: null, ct);
+        await using var tx = await TravarAgendaAsync(empresaId, v.Profissional.Id, ct);
+        var novo = await NovoAgendamentoAsync(empresaId, v, emAberto ? original.Id : null, original.Id, ct);
+        if (emAberto)
+        {
+            original.Status = StatusAgendamento.Cancelado;
+            original.MotivoCancelamento = "Remarcado";
+            original.DataAtualizacao = DateTime.UtcNow;
+        }
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        return (await ObterAsync(empresaId, novo.Id, ct))!;
+    }
+
+    /// <summary>Confere as regras de um horário novo e adiciona ao contexto (sem salvar). Exige a trava da agenda.</summary>
+    private async Task<Agendamento> NovoAgendamentoAsync(
+        int empresaId,
+        Validado v,
+        int? ignorarId,
+        int? remarcadoDeId,
+        CancellationToken ct)
+    {
         GarantirNaoPassado(v.Inicio);
         GarantirAtendeServicos(v.Profissional, v.Servicos);
-        await using var tx = await TravarAgendaAsync(empresaId, v.Profissional.Id, ct);
         await GarantirExpedienteAsync(empresaId, v.Profissional, v.Inicio, v.Fim, ct);
         await GarantirSemBloqueioAsync(empresaId, v.Profissional.Id, v.Inicio, v.Fim, ct);
-        await GarantirLivreAsync(empresaId, v.Profissional, v.Inicio, v.Fim, v.IntervaloApos, ignorarId: null, ct);
+        await GarantirLivreAsync(empresaId, v.Profissional, v.Inicio, v.Fim, v.IntervaloApos, ignorarId, ct);
 
         var entidade = new Agendamento
         {
@@ -115,13 +159,12 @@ public sealed class AgendamentoService(LyraDbContext db) : IAgendamentoService
             IntervaloAposMinutos = v.IntervaloApos,
             Status = StatusAgendamento.Agendado,
             Observacoes = v.Obs,
+            RemarcadoDeId = remarcadoDeId,
             DataCriacao = DateTime.UtcNow,
             Itens = MontarItens(v.Servicos),
         };
         db.Agendamentos.Add(entidade);
-        await db.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
-        return (await ObterAsync(empresaId, entidade.Id, ct))!;
+        return entidade;
     }
 
     public async Task<AgendamentoDto> AtualizarAsync(int empresaId, int id, SalvarAgendamentoRequest request, CancellationToken ct)
@@ -183,8 +226,13 @@ public sealed class AgendamentoService(LyraDbContext db) : IAgendamentoService
         return (await ObterAsync(empresaId, id, ct))!;
     }
 
-    public async Task<AgendamentoDto> AlterarStatusAsync(int empresaId, int id, string status, CancellationToken ct)
+    public async Task<AgendamentoDto> AlterarStatusAsync(int empresaId, int id, string status, string? motivo, CancellationToken ct)
     {
+        motivo = string.IsNullOrWhiteSpace(motivo) ? null : motivo.Trim();
+        if (motivo is { Length: > 200 })
+        {
+            throw new ArgumentException("O motivo pode ter no máximo 200 caracteres.");
+        }
         if (!StatusAgendamento.Valido(status))
         {
             throw new ArgumentException("Status inválido.");
@@ -207,6 +255,10 @@ public sealed class AgendamentoService(LyraDbContext db) : IAgendamentoService
             {
                 throw new InvalidOperationException("Só dá para iniciar o atendimento a partir de 1 hora antes do horário marcado.");
             }
+        }
+        if (novo == StatusAgendamento.Cancelado && entidade.Status != novo)
+        {
+            entidade.MotivoCancelamento = motivo;
         }
         entidade.Status = novo;
         entidade.DataAtualizacao = DateTime.UtcNow;
@@ -588,6 +640,8 @@ public sealed class AgendamentoService(LyraDbContext db) : IAgendamentoService
             a.Observacoes,
             a.DataCriacao,
             a.DataAtualizacao,
-            a.IntervaloAposMinutos);
+            a.IntervaloAposMinutos,
+            a.RemarcadoDeId,
+            a.MotivoCancelamento);
     }
 }

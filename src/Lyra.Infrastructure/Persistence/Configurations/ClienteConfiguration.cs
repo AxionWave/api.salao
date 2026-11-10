@@ -17,15 +17,16 @@ public sealed class ClienteConfiguration : IEntityTypeConfiguration<Cliente>
         builder.Property(x => x.Email).HasColumnName("email").HasMaxLength(160);
         builder.Property(x => x.Observacoes).HasColumnName("observacoes").HasMaxLength(1000);
         builder.Property(x => x.Ativo).HasColumnName("ativo").IsRequired();
+        builder.Property(x => x.FamiliaId).HasColumnName("familia_id");
+        builder.Property(x => x.Parentesco).HasColumnName("parentesco").HasMaxLength(40);
         builder.Property(x => x.DataCriacao).HasColumnName("data_criacao").IsRequired();
         builder.Property(x => x.DataAtualizacao).HasColumnName("data_atualizacao");
         builder.HasIndex(x => x.EmpresaId).HasDatabaseName("ix_clientes_empresa_id");
+        builder.HasIndex(x => x.FamiliaId).HasDatabaseName("ix_clientes_familia_id");
         builder.HasIndex(x => new { x.EmpresaId, x.Telefone })
-            .IsUnique()
-            .HasDatabaseName("ux_clientes_empresa_telefone");
+            .HasDatabaseName("ix_clientes_empresa_telefone");
         builder.HasIndex(x => new { x.EmpresaId, x.Email })
-            .IsUnique()
             .HasFilter("email IS NOT NULL")
-            .HasDatabaseName("ux_clientes_empresa_email");
+            .HasDatabaseName("ix_clientes_empresa_email");
     }
 }

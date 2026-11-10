@@ -34,6 +34,32 @@ public sealed class ClientesController(IClienteService clientes, ICurrentUserAcc
         return item is null ? NotFound(new { error = "not_found", message = "Cliente não encontrado." }) : Ok(item);
     }
 
+    [HttpGet("{id:int}/familia")]
+    public async Task<ActionResult<IReadOnlyList<ClienteDto>>> Familia(int id, CancellationToken ct)
+    {
+        if (!TryEmpresa(out var empresaId, out var erro)) return erro;
+        try
+        {
+            return Ok(await clientes.FamiliaAsync(empresaId, id, ct));
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound(new { error = "not_found", message = "Cliente não encontrado." });
+        }
+    }
+
+    /// <summary>Quem já usa o telefone ou o e-mail, para a tela oferecer a família antes de salvar.</summary>
+    [HttpGet("mesmo-contato")]
+    public async Task<ActionResult<IReadOnlyList<ClienteDto>>> MesmoContato(
+        [FromQuery] string? telefone,
+        [FromQuery] string? email,
+        [FromQuery] int? ignorarId,
+        CancellationToken ct)
+    {
+        if (!TryEmpresa(out var empresaId, out var erro)) return erro;
+        return Ok(await clientes.MesmoContatoAsync(empresaId, telefone, email, ignorarId, ct));
+    }
+
     [HttpPost]
     public async Task<ActionResult<ClienteDto>> Criar([FromBody] SalvarClienteRequest request, CancellationToken ct)
     {
