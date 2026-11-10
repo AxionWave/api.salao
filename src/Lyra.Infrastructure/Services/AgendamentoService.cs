@@ -3,6 +3,7 @@ using Lyra.Application.Agendamentos;
 using Lyra.Infrastructure.Persistence;
 using Lyra.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace Lyra.Infrastructure.Services;
 
@@ -99,6 +100,7 @@ public sealed class AgendamentoService(LyraDbContext db) : IAgendamentoService
         var v = await ValidarAsync(empresaId, request, atual: null, ct);
         GarantirNaoPassado(v.Inicio);
         GarantirAtendeServicos(v.Profissional, v.Servicos);
+        await using var tx = await TravarAgendaAsync(empresaId, v.Profissional.Id, ct);
         await GarantirExpedienteAsync(empresaId, v.Profissional, v.Inicio, v.Fim, ct);
         await GarantirSemBloqueioAsync(empresaId, v.Profissional.Id, v.Inicio, v.Fim, ct);
         await GarantirLivreAsync(empresaId, v.Profissional, v.Inicio, v.Fim, v.IntervaloApos, ignorarId: null, ct);
@@ -118,6 +120,7 @@ public sealed class AgendamentoService(LyraDbContext db) : IAgendamentoService
         };
         db.Agendamentos.Add(entidade);
         await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
         return (await ObterAsync(empresaId, entidade.Id, ct))!;
     }
 
@@ -144,6 +147,9 @@ public sealed class AgendamentoService(LyraDbContext db) : IAgendamentoService
         {
             GarantirAtendeServicos(v.Profissional, v.Servicos);
         }
+        await using var tx = mudouHorario || mudouServicos
+            ? await TravarAgendaAsync(empresaId, v.Profissional.Id, ct)
+            : null;
         if (mudouHorario)
         {
             await GarantirExpedienteAsync(empresaId, v.Profissional, v.Inicio, v.Fim, ct);
@@ -170,6 +176,10 @@ public sealed class AgendamentoService(LyraDbContext db) : IAgendamentoService
             }
         }
         await db.SaveChangesAsync(ct);
+        if (tx is not null)
+        {
+            await tx.CommitAsync(ct);
+        }
         return (await ObterAsync(empresaId, id, ct))!;
     }
 
@@ -520,6 +530,17 @@ public sealed class AgendamentoService(LyraDbContext db) : IAgendamentoService
             throw new InvalidOperationException(
                 $"Muito perto de outro agendamento de {profissional.Nome}: falta o tempo de preparo entre atendimentos.");
         }
+    }
+
+    /// <summary>
+    /// Serializa quem grava na agenda do mesmo profissional: sem isso, dois pedidos simultâneos
+    /// passam pela checagem de conflito antes de qualquer um gravar. A trava solta no fim da transação.
+    /// </summary>
+    private async Task<IDbContextTransaction> TravarAgendaAsync(int empresaId, int profissionalId, CancellationToken ct)
+    {
+        var tx = await db.Database.BeginTransactionAsync(ct);
+        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({empresaId}, {profissionalId})", ct);
+        return tx;
     }
 
     /// <summary>Cada agendamento ocupa de Inicio até Fim + preparo.</summary>
