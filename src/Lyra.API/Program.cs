@@ -13,6 +13,25 @@ builder.Configuration.AddJsonFile(
     optional: true,
     reloadOnChange: true);
 
+// Sem DSN (local e testes) o Sentry fica desligado.
+var sentryDsn = builder.Configuration["Sentry:Dsn"];
+if (!string.IsNullOrWhiteSpace(sentryDsn))
+{
+    builder.WebHost.UseSentry(o =>
+    {
+        o.Dsn = sentryDsn;
+        o.Environment = builder.Configuration["Sentry:Environment"] ?? builder.Environment.EnvironmentName.ToLowerInvariant();
+        o.Release = builder.Configuration["Sentry:Release"];
+        // Dados de clientes (nome, telefone) não devem sair para o Sentry.
+        o.SendDefaultPii = false;
+        o.EnableLogs = true;
+        o.TracesSampler = ctx =>
+            ctx.TransactionContext.Name.Contains("/health", StringComparison.OrdinalIgnoreCase) ? 0.0
+            : builder.Environment.IsDevelopment() ? 1.0
+            : 0.2;
+    });
+}
+
 builder.Services.AddScoped<Lyra.API.Exceptions.ApiExceptionFilter>();
 builder.Services.AddControllers(o => o.Filters.Add<Lyra.API.Exceptions.ApiExceptionFilter>())
     .AddJsonOptions(o =>

@@ -5,6 +5,7 @@ services:
   salao:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
+      - Sentry__Dsn=
       - ConnectionStrings__Default=Host=${DB_HOST:-postgres};Port=${DB_PORT:-5432};Database=${POSTGRES_DB:-base};Username=${DB_USERNAME:-postgres};Password=${DB_PASSWORD};Search Path=lyra
     ports:
       - "127.0.0.1:8092:8080"

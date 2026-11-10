@@ -11,6 +11,9 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - Jwt__Issuer=${JWT_ISSUER}
       - Jwt__Audience=${JWT_AUDIENCE}
+      - Sentry__Dsn=${SENTRY_DSN_API:-https://e328c8fcf6bff841f3e6cd7037f5ab31@o4512408706875392.ingest.us.sentry.io/4512408734203904}
+      - Sentry__Environment=production
+      - Sentry__Release=${SENTRY_RELEASE:-}
       - ConnectionStrings__Default=Host=postgres;Port=5432;Database=${POSTGRES_DB:-base};Username=${DB_USERNAME:-postgres};Password=${DB_PASSWORD};Search Path=lyra
     restart: on-failure:5
     healthcheck:

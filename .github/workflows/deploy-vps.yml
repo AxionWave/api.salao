@@ -40,6 +40,7 @@ jobs:
             git reset --hard origin/production
             docker exec postgres psql -U postgres -d base -c "CREATE SCHEMA IF NOT EXISTS lyra;"
             # O override do repositório é só para a máquina local (Development e porta publicada).
+            export SENTRY_RELEASE="lyra-api@$(git rev-parse --short HEAD)"
             docker compose -f docker-compose.yml --env-file /opt/enterprise/.env up -d --build
             if [ -f infra/seed-sistema.sql ]; then
               docker exec -i postgres psql -U postgres -d base < infra/seed-sistema.sql || true
