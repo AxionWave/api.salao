@@ -1,5 +1,7 @@
+using Lyra.Infrastructure.Notificacoes;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 
 namespace Lyra.Tests.Infra;
@@ -44,12 +46,29 @@ public sealed class ApiFixture : IAsyncLifetime
         var conexao = new NpgsqlConnectionStringBuilder(servidor.ConnectionString) { Database = banco, SearchPath = "lyra" };
         Environment.SetEnvironmentVariable("ConnectionStrings__Default", conexao.ConnectionString);
         Environment.SetEnvironmentVariable("JWT_SECRET", Segredo);
+        Environment.SetEnvironmentVariable("Notificacoes__Worker", "false");
+        Environment.SetEnvironmentVariable("Notificacoes__Canais__0", CanalTeste.NomeCanal);
 
-        factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b => b.UseEnvironment("Testing"));
+        factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b => b
+            .UseEnvironment("Testing")
+            .ConfigureServices(s => s.AddSingleton<ICanalNotificacao>(Canal)));
         _ = factory.Server;
     }
 
+    public CanalTeste Canal { get; } = new();
+
     public HttpClient NovoHttp() => factory?.CreateClient()
+        ?? throw new InvalidOperationException("A API de testes não subiu.");
+
+    /// <summary>Roda uma passada do processador da fila, como o worker faria.</summary>
+    public async Task<int> ProcessarFila()
+    {
+        using var scope = Servicos.CreateScope();
+        return await scope.ServiceProvider.GetRequiredService<ProcessadorNotificacoes>()
+            .ProcessarPendentesAsync(10_000, CancellationToken.None);
+    }
+
+    public IServiceProvider Servicos => factory?.Services
         ?? throw new InvalidOperationException("A API de testes não subiu.");
 
     public async Task DisposeAsync()

@@ -1,5 +1,6 @@
 using Lyra.Application.Abstractions;
 using Lyra.Infrastructure.Auth;
+using Lyra.Infrastructure.Notificacoes;
 using Lyra.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -20,6 +21,15 @@ public static class DependencyInjection
         services.AddScoped<IPerfilLyraService, Lyra.Infrastructure.Services.PerfilLyraService>();
         services.AddScoped<IConfiguracaoEmpresaService, Lyra.Infrastructure.Services.ConfiguracaoEmpresaService>();
         services.AddScoped<IBloqueioService, Lyra.Infrastructure.Services.BloqueioService>();
+        services.AddScoped<INotificacaoService, NotificacaoService>();
+
+        services.Configure<NotificacoesOptions>(configuration.GetSection(NotificacoesOptions.Secao));
+        services.AddScoped<FilaNotificacoes>();
+        services.AddScoped<ProcessadorNotificacoes>();
+        if (configuration.GetValue(NotificacoesOptions.Secao + ":Worker", true))
+        {
+            services.AddHostedService<WorkerNotificacoes>();
+        }
 
         var conn = configuration.GetConnectionString("Default");
         if (!string.IsNullOrWhiteSpace(conn))

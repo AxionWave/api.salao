@@ -1,5 +1,7 @@
 using Lyra.Application.Abstractions;
 using Lyra.Application.Agendamentos;
+using Lyra.Application.Notificacoes;
+using Lyra.Infrastructure.Notificacoes;
 using Lyra.Infrastructure.Persistence;
 using Lyra.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -7,7 +9,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 
 namespace Lyra.Infrastructure.Services;
 
-public sealed class AgendamentoService(LyraDbContext db) : IAgendamentoService
+public sealed class AgendamentoService(LyraDbContext db, FilaNotificacoes fila) : IAgendamentoService
 {
     private const int MaxIntervaloApos = ServicoService.MaxIntervaloAposMinutos;
     public const int MaxDiasListagem = 62;
@@ -103,6 +105,7 @@ public sealed class AgendamentoService(LyraDbContext db) : IAgendamentoService
         var v = await ValidarAsync(empresaId, request, atual: null, ct);
         await using var tx = await TravarAgendaAsync(empresaId, v.Profissional.Id, ct);
         var entidade = await NovoAgendamentoAsync(empresaId, v, ignorarId: null, remarcadoDeId: null, ct);
+        await fila.EnfileirarAsync(entidade, EventosNotificacao.AgendamentoCriado, ct);
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
         return (await ObterAsync(empresaId, entidade.Id, ct))!;
@@ -133,6 +136,7 @@ public sealed class AgendamentoService(LyraDbContext db) : IAgendamentoService
             original.MotivoCancelamento = "Remarcado";
             original.DataAtualizacao = DateTime.UtcNow;
         }
+        await fila.EnfileirarAsync(novo, EventosNotificacao.AgendamentoRemarcado, ct, inicioAnterior: original.Inicio);
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
         return (await ObterAsync(empresaId, novo.Id, ct))!;
@@ -206,6 +210,7 @@ public sealed class AgendamentoService(LyraDbContext db) : IAgendamentoService
             await GarantirLivreAsync(empresaId, v.Profissional, v.Inicio, v.Fim, v.IntervaloApos, id, ct);
         }
 
+        var inicioAnterior = entidade.Inicio;
         entidade.ClienteId = v.Cliente.Id;
         entidade.ProfissionalId = v.Profissional.Id;
         entidade.Inicio = v.Inicio;
@@ -220,6 +225,10 @@ public sealed class AgendamentoService(LyraDbContext db) : IAgendamentoService
             {
                 entidade.Itens.Add(item);
             }
+        }
+        if (mudouProfissional || inicioAnterior != v.Inicio)
+        {
+            await fila.EnfileirarAsync(entidade, EventosNotificacao.AgendamentoRemarcado, ct, inicioAnterior: inicioAnterior);
         }
         await db.SaveChangesAsync(ct);
         if (tx is not null)
@@ -263,8 +272,17 @@ public sealed class AgendamentoService(LyraDbContext db) : IAgendamentoService
         {
             entidade.MotivoCancelamento = motivo;
         }
+        var mudou = entidade.Status != novo;
         entidade.Status = novo;
         entidade.DataAtualizacao = DateTime.UtcNow;
+        if (mudou && novo == StatusAgendamento.Cancelado)
+        {
+            await fila.EnfileirarAsync(entidade, EventosNotificacao.AgendamentoCancelado, ct, motivo: motivo);
+        }
+        else if (mudou && novo == StatusAgendamento.Confirmado)
+        {
+            await fila.EnfileirarAsync(entidade, EventosNotificacao.AgendamentoConfirmado, ct);
+        }
         await db.SaveChangesAsync(ct);
         return (await ObterAsync(empresaId, id, ct))!;
     }

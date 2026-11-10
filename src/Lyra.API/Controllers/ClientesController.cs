@@ -1,6 +1,7 @@
 using Lyra.API.Auth;
 using Lyra.Application.Abstractions;
 using Lyra.Application.Clientes;
+using Lyra.Application.Notificacoes;
 using Lyra.Application.Servicos;
 using Lyra.Core.Modules;
 using Microsoft.AspNetCore.Authorization;
@@ -41,6 +42,24 @@ public sealed class ClientesController(IClienteService clientes, ICurrentUserAcc
         try
         {
             return Ok(await clientes.FamiliaAsync(empresaId, id, ct));
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound(new { error = "not_found", message = "Cliente não encontrado." });
+        }
+    }
+
+    /// <summary>Mensagens enviadas (ou tentadas) a este cliente, das mais recentes para as mais antigas.</summary>
+    [HttpGet("{id:int}/notificacoes")]
+    public async Task<ActionResult<IReadOnlyList<NotificacaoDto>>> Notificacoes(
+        int id,
+        [FromServices] INotificacaoService notificacoes,
+        CancellationToken ct)
+    {
+        if (!TryEmpresa(out var empresaId, out var erro)) return erro;
+        try
+        {
+            return Ok(await notificacoes.HistoricoClienteAsync(empresaId, id, ct));
         }
         catch (KeyNotFoundException)
         {

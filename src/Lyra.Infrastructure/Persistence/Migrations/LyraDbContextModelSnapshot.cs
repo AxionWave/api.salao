@@ -370,6 +370,99 @@ namespace Lyra.Infrastructure.Persistence.Migrations
                     b.ToTable("familias", "lyra");
                 });
 
+            modelBuilder.Entity("Lyra.Infrastructure.Persistence.Entities.Notificacao", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int?>("AgendamentoId")
+                        .HasColumnType("integer")
+                        .HasColumnName("agendamento_id");
+
+                    b.Property<string>("Canal")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("canal");
+
+                    b.Property<int?>("ClienteId")
+                        .HasColumnType("integer")
+                        .HasColumnName("cliente_id");
+
+                    b.Property<string>("Dados")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("dados");
+
+                    b.Property<DateTime>("DataCriacao")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("data_criacao");
+
+                    b.Property<DateTime?>("DataEnvio")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("data_envio");
+
+                    b.Property<string>("Destino")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("destino");
+
+                    b.Property<int>("EmpresaId")
+                        .HasColumnType("integer")
+                        .HasColumnName("empresa_id");
+
+                    b.Property<string>("Evento")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("evento");
+
+                    b.Property<string>("ProvedorId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("provedor_id");
+
+                    b.Property<DateTime>("ProximaTentativa")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("proxima_tentativa");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<int>("Tentativas")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("tentativas");
+
+                    b.Property<string>("UltimoErro")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("ultimo_erro");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AgendamentoId");
+
+                    b.HasIndex("ClienteId");
+
+                    b.HasIndex("ProximaTentativa")
+                        .HasDatabaseName("ix_notificacoes_pendentes")
+                        .HasFilter("status = 'pendente'");
+
+                    b.HasIndex("EmpresaId", "ClienteId", "DataCriacao")
+                        .HasDatabaseName("ix_notificacoes_empresa_cliente");
+
+                    b.ToTable("notificacoes", "lyra");
+                });
+
             modelBuilder.Entity("Lyra.Infrastructure.Persistence.Entities.Profissional", b =>
                 {
                     b.Property<int>("Id")
@@ -581,6 +674,21 @@ namespace Lyra.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Profissional");
+                });
+
+            modelBuilder.Entity("Lyra.Infrastructure.Persistence.Entities.Notificacao", b =>
+                {
+                    b.HasOne("Lyra.Infrastructure.Persistence.Entities.Agendamento", "Agendamento")
+                        .WithMany()
+                        .HasForeignKey("AgendamentoId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Lyra.Infrastructure.Persistence.Entities.Cliente", null)
+                        .WithMany()
+                        .HasForeignKey("ClienteId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Agendamento");
                 });
 
             modelBuilder.Entity("Lyra.Infrastructure.Persistence.Entities.ServicoProfissional", b =>
