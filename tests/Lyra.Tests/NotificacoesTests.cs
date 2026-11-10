@@ -71,7 +71,7 @@ public sealed class NotificacoesTests(ApiFixture api)
         Exigir(await c.Admin.Patch($"/api/salao/agendamentos/{novo}/status", new { status = "confirmado" }), 200);
         Exigir(await c.Admin.Patch($"/api/salao/agendamentos/{novo}/status", new { status = "cancelado", motivo = "Viagem" }), 200);
 
-        var historico = (await Historico(c, c.Maria)).Reverse().ToArray();
+        var historico = (await Historico(c, c.Maria)).OrderBy(IdDe).ToArray();
 
         Assert.Equal(
             new[] { "agendamento_criado", "agendamento_remarcado", "agendamento_remarcado", "agendamento_confirmado", "agendamento_cancelado" },
