@@ -18,6 +18,8 @@ public static class DependencyInjection
         services.AddScoped<IProfissionalService, Lyra.Infrastructure.Services.ProfissionalService>();
         services.AddScoped<IAgendamentoService, Lyra.Infrastructure.Services.AgendamentoService>();
         services.AddScoped<IPerfilLyraService, Lyra.Infrastructure.Services.PerfilLyraService>();
+        services.AddScoped<IConfiguracaoEmpresaService, Lyra.Infrastructure.Services.ConfiguracaoEmpresaService>();
+        services.AddScoped<IBloqueioService, Lyra.Infrastructure.Services.BloqueioService>();
 
         var conn = configuration.GetConnectionString("Default");
         if (!string.IsNullOrWhiteSpace(conn))

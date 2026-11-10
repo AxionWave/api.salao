@@ -8,6 +8,8 @@ namespace Lyra.Infrastructure.Services;
 
 public sealed class AgendamentoService(LyraDbContext db) : IAgendamentoService
 {
+    private const int MaxIntervaloApos = ServicoService.MaxIntervaloAposMinutos;
+
     public async Task<ListaAgendamentosResponse> ListarAsync(
         int empresaId,
         DateTime de,
@@ -16,8 +18,8 @@ public sealed class AgendamentoService(LyraDbContext db) : IAgendamentoService
         string? status,
         CancellationToken ct)
     {
-        var inicio = AsUtc(de);
-        var fim = AsUtc(ate);
+        var inicio = DatasUtc.Normalizar(de);
+        var fim = DatasUtc.Normalizar(ate);
         if (fim <= inicio)
         {
             throw new ArgumentException("O fim do período deve ser depois do início.");
@@ -52,9 +54,12 @@ public sealed class AgendamentoService(LyraDbContext db) : IAgendamentoService
             .ToListAsync(ct);
 
         var servicos = await db.Servicos.AsNoTracking()
+            .Include(s => s.Profissionais)
             .Where(s => s.EmpresaId == empresaId && s.Ativo)
             .OrderBy(s => s.Nome)
             .ToListAsync(ct);
+
+        var fuso = await FusoHorarioEmpresa.ObterAsync(db, empresaId, ct);
 
         return new OpcoesAgendaResponse(
             profissionais.Select(p => new ProfissionalAgendaDto(
@@ -63,9 +68,17 @@ public sealed class AgendamentoService(LyraDbContext db) : IAgendamentoService
                 p.Cor,
                 p.Disponibilidades
                     .OrderBy(d => d.DiaSemana)
+                    .ThenBy(d => d.Inicio)
                     .Select(d => new IntervaloAgendaDto(d.DiaSemana, HhMm(d.Inicio), HhMm(d.Fim)))
                     .ToList())).ToList(),
-            servicos.Select(s => new ServicoAgendaDto(s.Id, s.Nome, s.DuracaoMinutos, s.Preco)).ToList());
+            servicos.Select(s => new ServicoAgendaDto(
+                s.Id,
+                s.Nome,
+                s.DuracaoMinutos,
+                s.Preco,
+                s.IntervaloAposMinutos,
+                s.Profissionais.Select(v => v.ProfissionalId).Order().ToList())).ToList(),
+            fuso.Id);
     }
 
     public async Task<AgendamentoDto?> ObterAsync(int empresaId, int id, CancellationToken ct)
@@ -76,20 +89,24 @@ public sealed class AgendamentoService(LyraDbContext db) : IAgendamentoService
 
     public async Task<AgendamentoDto> CriarAsync(int empresaId, SalvarAgendamentoRequest request, CancellationToken ct)
     {
-        var (cliente, servicos, profissional, inicio, fim, obs) = await ValidarAsync(empresaId, request, ct);
-        await GarantirLivreAsync(empresaId, profissional.Id, inicio, fim, ignorarId: null, ct);
+        var v = await ValidarAsync(empresaId, request, ct);
+        GarantirAtendeServicos(v.Profissional, v.Servicos);
+        await GarantirExpedienteAsync(empresaId, v.Profissional, v.Inicio, v.Fim, ct);
+        await GarantirSemBloqueioAsync(empresaId, v.Profissional.Id, v.Inicio, v.Fim, ct);
+        await GarantirLivreAsync(empresaId, v.Profissional, v.Inicio, v.Fim, v.IntervaloApos, ignorarId: null, ct);
 
         var entidade = new Agendamento
         {
             EmpresaId = empresaId,
-            ClienteId = cliente.Id,
-            ProfissionalId = profissional.Id,
-            Inicio = inicio,
-            Fim = fim,
+            ClienteId = v.Cliente.Id,
+            ProfissionalId = v.Profissional.Id,
+            Inicio = v.Inicio,
+            Fim = v.Fim,
+            IntervaloAposMinutos = v.IntervaloApos,
             Status = StatusAgendamento.Agendado,
-            Observacoes = obs,
+            Observacoes = v.Obs,
             DataCriacao = DateTime.UtcNow,
-            Itens = MontarItens(servicos),
+            Itens = MontarItens(v.Servicos),
         };
         db.Agendamentos.Add(entidade);
         await db.SaveChangesAsync(ct);
@@ -107,17 +124,34 @@ public sealed class AgendamentoService(LyraDbContext db) : IAgendamentoService
             throw new InvalidOperationException("Não é possível alterar um agendamento encerrado.");
         }
 
-        var (cliente, servicos, profissional, inicio, fim, obs) = await ValidarAsync(empresaId, request, ct);
-        await GarantirLivreAsync(empresaId, profissional.Id, inicio, fim, id, ct);
+        var v = await ValidarAsync(empresaId, request, ct);
+        var mudouProfissional = entidade.ProfissionalId != v.Profissional.Id;
+        var mudouServicos = !entidade.Itens.OrderBy(i => i.Ordem).Select(i => i.ServicoId)
+            .SequenceEqual(v.Servicos.Select(s => s.Id));
+        var mudouHorario = mudouProfissional || entidade.Inicio != v.Inicio || entidade.Fim != v.Fim;
+        if (mudouProfissional || mudouServicos)
+        {
+            GarantirAtendeServicos(v.Profissional, v.Servicos);
+        }
+        if (mudouHorario)
+        {
+            await GarantirExpedienteAsync(empresaId, v.Profissional, v.Inicio, v.Fim, ct);
+            await GarantirSemBloqueioAsync(empresaId, v.Profissional.Id, v.Inicio, v.Fim, ct);
+        }
+        if (mudouHorario || mudouServicos)
+        {
+            await GarantirLivreAsync(empresaId, v.Profissional, v.Inicio, v.Fim, v.IntervaloApos, id, ct);
+        }
 
-        entidade.ClienteId = cliente.Id;
-        entidade.ProfissionalId = profissional.Id;
-        entidade.Inicio = inicio;
-        entidade.Fim = fim;
-        entidade.Observacoes = obs;
+        entidade.ClienteId = v.Cliente.Id;
+        entidade.ProfissionalId = v.Profissional.Id;
+        entidade.Inicio = v.Inicio;
+        entidade.Fim = v.Fim;
+        entidade.IntervaloAposMinutos = v.IntervaloApos;
+        entidade.Observacoes = v.Obs;
         entidade.DataAtualizacao = DateTime.UtcNow;
         entidade.Itens.Clear();
-        foreach (var item in MontarItens(servicos))
+        foreach (var item in MontarItens(v.Servicos))
         {
             entidade.Itens.Add(item);
         }
@@ -144,6 +178,96 @@ public sealed class AgendamentoService(LyraDbContext db) : IAgendamentoService
         return (await ObterAsync(empresaId, id, ct))!;
     }
 
+    public async Task<HorariosLivresResponse> HorariosLivresAsync(
+        int empresaId,
+        HorariosLivresRequest request,
+        CancellationToken ct)
+    {
+        if (request.PassoMinutos is < 5 or > 60)
+        {
+            throw new ArgumentException("O passo deve ser entre 5 e 60 minutos.");
+        }
+
+        var servicos = await CarregarServicosAsync(empresaId, request.ServicoIds, ct);
+        var duracao = servicos.Sum(s => s.DuracaoMinutos);
+        var intervaloApos = servicos.Max(s => s.IntervaloAposMinutos);
+        var fuso = await FusoHorarioEmpresa.ObterAsync(db, empresaId, ct);
+
+        var qProf = db.Profissionais.AsNoTracking()
+            .Include(p => p.Disponibilidades)
+            .Where(p => p.EmpresaId == empresaId && p.Ativo);
+        if (request.ProfissionalId is int pid)
+        {
+            qProf = qProf.Where(p => p.Id == pid);
+        }
+        var profissionais = (await qProf.OrderBy(p => p.Nome).ToListAsync(ct))
+            .Where(p => servicos.All(s => Atende(s, p.Id)))
+            .ToList();
+
+        var inicioDia = ParaUtc(request.Data.ToDateTime(TimeOnly.MinValue), fuso);
+        var fimDia = ParaUtc(request.Data.AddDays(1).ToDateTime(TimeOnly.MinValue), fuso);
+        var profIds = profissionais.Select(p => p.Id).ToList();
+        var ignorarId = request.IgnorarAgendamentoId ?? 0;
+        var desde = inicioDia.AddMinutes(-MaxIntervaloApos);
+        var ate = fimDia.AddMinutes(duracao + intervaloApos);
+
+        var ocupados = await db.Agendamentos.AsNoTracking()
+            .Where(a => a.EmpresaId == empresaId
+                && profIds.Contains(a.ProfissionalId)
+                && a.Status != StatusAgendamento.Cancelado
+                && a.Id != ignorarId
+                && a.Inicio < ate
+                && a.Fim > desde)
+            .Select(a => new Ocupacao(a.ProfissionalId, a.Inicio, a.Fim, a.IntervaloAposMinutos))
+            .ToListAsync(ct);
+        var bloqueios = await db.Bloqueios.AsNoTracking()
+            .Where(b => b.EmpresaId == empresaId
+                && (b.ProfissionalId == null || profIds.Contains(b.ProfissionalId.Value))
+                && b.Inicio < ate
+                && b.Fim > inicioDia)
+            .Select(b => new { b.ProfissionalId, b.Inicio, b.Fim })
+            .ToListAsync(ct);
+
+        var agora = DateTime.UtcNow;
+        var diaSemana = (int)request.Data.DayOfWeek;
+        var resultado = new List<HorariosLivresProfissionalDto>(profissionais.Count);
+        foreach (var p in profissionais)
+        {
+            var horarios = new List<HorarioLivreDto>();
+            var faixas = p.Disponibilidades.Where(d => d.DiaSemana == diaSemana).OrderBy(d => d.Inicio);
+            foreach (var faixa in faixas)
+            {
+                var faixaFim = (int)faixa.Fim.ToTimeSpan().TotalMinutes;
+                for (var m = (int)faixa.Inicio.ToTimeSpan().TotalMinutes; m + duracao <= faixaFim; m += request.PassoMinutos)
+                {
+                    var local = request.Data.ToDateTime(TimeOnly.MinValue).AddMinutes(m);
+                    if (fuso.IsInvalidTime(local))
+                    {
+                        continue;
+                    }
+                    var inicio = ParaUtc(local, fuso);
+                    var fim = inicio.AddMinutes(duracao);
+                    if (inicio <= agora)
+                    {
+                        continue;
+                    }
+                    if (bloqueios.Any(b => (b.ProfissionalId == null || b.ProfissionalId == p.Id) && b.Inicio < fim && b.Fim > inicio))
+                    {
+                        continue;
+                    }
+                    if (ocupados.Any(o => o.ProfissionalId == p.Id && Conflita(o, inicio, fim, intervaloApos)))
+                    {
+                        continue;
+                    }
+                    horarios.Add(new HorarioLivreDto(inicio, local.ToString("HH\\:mm")));
+                }
+            }
+            resultado.Add(new HorariosLivresProfissionalDto(p.Id, p.Nome, horarios));
+        }
+
+        return new HorariosLivresResponse(request.Data, duracao, fuso.Id, resultado);
+    }
+
     private IQueryable<Agendamento> QueryCompleto(int empresaId) =>
         db.Agendamentos.AsNoTracking()
             .Include(a => a.Cliente)
@@ -151,8 +275,18 @@ public sealed class AgendamentoService(LyraDbContext db) : IAgendamentoService
             .Include(a => a.Itens).ThenInclude(i => i.Servico)
             .Where(a => a.EmpresaId == empresaId);
 
-    private async Task<(Cliente Cliente, IReadOnlyList<Servico> Servicos, Profissional Profissional, DateTime Inicio, DateTime Fim, string? Obs)>
-        ValidarAsync(int empresaId, SalvarAgendamentoRequest request, CancellationToken ct)
+    private sealed record Validado(
+        Cliente Cliente,
+        IReadOnlyList<Servico> Servicos,
+        Profissional Profissional,
+        DateTime Inicio,
+        DateTime Fim,
+        int IntervaloApos,
+        string? Obs);
+
+    private sealed record Ocupacao(int ProfissionalId, DateTime Inicio, DateTime Fim, int IntervaloAposMinutos);
+
+    private async Task<Validado> ValidarAsync(int empresaId, SalvarAgendamentoRequest request, CancellationToken ct)
     {
         var cliente = await db.Clientes.AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == request.ClienteId && c.EmpresaId == empresaId, ct)
@@ -162,7 +296,40 @@ public sealed class AgendamentoService(LyraDbContext db) : IAgendamentoService
             throw new ArgumentException("Cliente inativo.");
         }
 
-        var ids = request.ServicoIds ?? [];
+        var servicos = await CarregarServicosAsync(empresaId, request.ServicoIds, ct);
+
+        var profissional = await db.Profissionais.AsNoTracking()
+            .Include(p => p.Disponibilidades)
+            .FirstOrDefaultAsync(p => p.Id == request.ProfissionalId && p.EmpresaId == empresaId, ct)
+            ?? throw new ArgumentException("Profissional não encontrado nesta empresa.");
+        if (!profissional.Ativo)
+        {
+            throw new ArgumentException("Profissional inativo.");
+        }
+
+        var inicio = DatasUtc.Normalizar(request.Inicio);
+        var fim = inicio.AddMinutes(servicos.Sum(s => s.DuracaoMinutos));
+        if (fim <= inicio)
+        {
+            throw new ArgumentException("Horário inválido.");
+        }
+
+        var obs = string.IsNullOrWhiteSpace(request.Observacoes) ? null : request.Observacoes.Trim();
+        if (obs is { Length: > 1000 })
+        {
+            throw new ArgumentException("Observações devem ter no máximo 1000 caracteres.");
+        }
+
+        return new Validado(cliente, servicos, profissional, inicio, fim, servicos.Max(s => s.IntervaloAposMinutos), obs);
+    }
+
+    /// <summary>Serviços na ordem pedida (repetições permitidas), todos ativos e da empresa.</summary>
+    private async Task<IReadOnlyList<Servico>> CarregarServicosAsync(
+        int empresaId,
+        IReadOnlyList<int>? servicoIds,
+        CancellationToken ct)
+    {
+        var ids = servicoIds ?? [];
         if (ids.Count == 0)
         {
             throw new ArgumentException("Informe ao menos um serviço.");
@@ -173,6 +340,7 @@ public sealed class AgendamentoService(LyraDbContext db) : IAgendamentoService
         }
 
         var encontrados = await db.Servicos.AsNoTracking()
+            .Include(s => s.Profissionais)
             .Where(s => s.EmpresaId == empresaId && ids.Contains(s.Id))
             .ToListAsync(ct);
         var porId = encontrados.ToDictionary(s => s.Id);
@@ -193,54 +361,123 @@ public sealed class AgendamentoService(LyraDbContext db) : IAgendamentoService
             }
             servicos.Add(servico);
         }
-
-        var profissional = await db.Profissionais.AsNoTracking()
-            .FirstOrDefaultAsync(p => p.Id == request.ProfissionalId && p.EmpresaId == empresaId, ct)
-            ?? throw new ArgumentException("Profissional não encontrado nesta empresa.");
-        if (!profissional.Ativo)
-        {
-            throw new ArgumentException("Profissional inativo.");
-        }
-
-        var inicio = AsUtc(request.Inicio);
-        var fim = inicio.AddMinutes(servicos.Sum(s => s.DuracaoMinutos));
-        if (fim <= inicio)
-        {
-            throw new ArgumentException("Horário inválido.");
-        }
-
-        var obs = string.IsNullOrWhiteSpace(request.Observacoes) ? null : request.Observacoes.Trim();
-        if (obs is { Length: > 1000 })
-        {
-            throw new ArgumentException("Observações devem ter no máximo 1000 caracteres.");
-        }
-
-        return (cliente, servicos, profissional, inicio, fim, obs);
+        return servicos;
     }
 
-    private async Task GarantirLivreAsync(
+    private static bool Atende(Servico servico, int profissionalId) =>
+        servico.Profissionais.Count == 0 || servico.Profissionais.Any(v => v.ProfissionalId == profissionalId);
+
+    private static void GarantirAtendeServicos(Profissional profissional, IReadOnlyList<Servico> servicos)
+    {
+        var naoAtende = servicos.FirstOrDefault(s => !Atende(s, profissional.Id));
+        if (naoAtende is not null)
+        {
+            throw new InvalidOperationException($"{profissional.Nome} não atende «{naoAtende.Nome}».");
+        }
+    }
+
+    /// <summary>O agendamento inteiro precisa caber numa faixa de expediente do dia, no fuso da empresa.</summary>
+    private async Task GarantirExpedienteAsync(
+        int empresaId,
+        Profissional profissional,
+        DateTime inicio,
+        DateTime fim,
+        CancellationToken ct)
+    {
+        var fuso = await FusoHorarioEmpresa.ObterAsync(db, empresaId, ct);
+        var localInicio = TimeZoneInfo.ConvertTimeFromUtc(inicio, fuso);
+        var localFim = TimeZoneInfo.ConvertTimeFromUtc(fim, fuso);
+        var minutoInicio = localInicio.TimeOfDay.TotalMinutes;
+        var minutoFim = (localFim - localInicio.Date).TotalMinutes;
+        if (minutoFim > 24 * 60)
+        {
+            throw new InvalidOperationException("O atendimento precisa começar e terminar no mesmo dia.");
+        }
+
+        var faixas = profissional.Disponibilidades
+            .Where(d => d.DiaSemana == (int)localInicio.DayOfWeek)
+            .OrderBy(d => d.Inicio)
+            .ToList();
+        if (faixas.Count == 0)
+        {
+            throw new InvalidOperationException($"{profissional.Nome} não atende neste dia da semana.");
+        }
+
+        var cabe = faixas.Any(d =>
+            d.Inicio.ToTimeSpan().TotalMinutes <= minutoInicio
+            && minutoFim <= d.Fim.ToTimeSpan().TotalMinutes);
+        if (!cabe)
+        {
+            var texto = string.Join(", ", faixas.Select(d => $"{HhMm(d.Inicio)}–{HhMm(d.Fim)}"));
+            throw new InvalidOperationException($"Fora do expediente de {profissional.Nome} neste dia ({texto}).");
+        }
+    }
+
+    private async Task GarantirSemBloqueioAsync(
         int empresaId,
         int profissionalId,
         DateTime inicio,
         DateTime fim,
+        CancellationToken ct)
+    {
+        var bloqueio = await db.Bloqueios.AsNoTracking()
+            .Where(b => b.EmpresaId == empresaId
+                && (b.ProfissionalId == null || b.ProfissionalId == profissionalId)
+                && b.Inicio < fim
+                && b.Fim > inicio)
+            .OrderBy(b => b.Inicio)
+            .FirstOrDefaultAsync(ct);
+        if (bloqueio is not null)
+        {
+            throw new InvalidOperationException(bloqueio.Motivo is null
+                ? "Este horário está bloqueado na agenda."
+                : $"Este horário está bloqueado na agenda: {bloqueio.Motivo}.");
+        }
+    }
+
+    private async Task GarantirLivreAsync(
+        int empresaId,
+        Profissional profissional,
+        DateTime inicio,
+        DateTime fim,
+        int intervaloApos,
         int? ignorarId,
         CancellationToken ct)
     {
+        var profissionalId = profissional.Id;
+        var ate = fim.AddMinutes(intervaloApos);
+        var desde = inicio.AddMinutes(-MaxIntervaloApos);
         var q = db.Agendamentos.AsNoTracking().Where(a =>
             a.EmpresaId == empresaId
             && a.ProfissionalId == profissionalId
             && a.Status != StatusAgendamento.Cancelado
-            && a.Inicio < fim
-            && a.Fim > inicio);
+            && a.Inicio < ate
+            && a.Fim > desde);
         if (ignorarId is int id)
         {
             q = q.Where(a => a.Id != id);
         }
-        if (await q.AnyAsync(ct))
+
+        var candidatos = await q
+            .Select(a => new Ocupacao(a.ProfissionalId, a.Inicio, a.Fim, a.IntervaloAposMinutos))
+            .ToListAsync(ct);
+        if (candidatos.Any(o => o.Inicio < fim && o.Fim > inicio))
         {
-            throw new InvalidOperationException("Este profissional já tem um horário neste intervalo.");
+            throw new InvalidOperationException($"{profissional.Nome} já tem outro agendamento neste intervalo.");
+        }
+        if (candidatos.Any(o => Conflita(o, inicio, fim, intervaloApos)))
+        {
+            throw new InvalidOperationException(
+                $"Muito perto de outro agendamento de {profissional.Nome}: falta o tempo de preparo entre atendimentos.");
         }
     }
+
+    /// <summary>Cada agendamento ocupa de Inicio até Fim + preparo.</summary>
+    private static bool Conflita(Ocupacao o, DateTime inicio, DateTime fim, int intervaloApos) =>
+        o.Inicio < fim.AddMinutes(intervaloApos) && o.Fim.AddMinutes(o.IntervaloAposMinutos) > inicio;
+
+    private static DateTime ParaUtc(DateTime local, TimeZoneInfo fuso) =>
+        TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(local, DateTimeKind.Unspecified), fuso);
 
     private static List<AgendamentoItem> MontarItens(IReadOnlyList<Servico> servicos) =>
         servicos.Select((s, i) => new AgendamentoItem
@@ -250,16 +487,6 @@ public sealed class AgendamentoService(LyraDbContext db) : IAgendamentoService
             DuracaoMinutos = s.DuracaoMinutos,
             Preco = s.Preco,
         }).ToList();
-
-    private static DateTime AsUtc(DateTime valor)
-    {
-        return valor.Kind switch
-        {
-            DateTimeKind.Utc => valor,
-            DateTimeKind.Local => valor.ToUniversalTime(),
-            _ => DateTime.SpecifyKind(valor, DateTimeKind.Utc),
-        };
-    }
 
     private static string HhMm(TimeOnly t) => t.ToString("HH\\:mm");
 
@@ -289,6 +516,7 @@ public sealed class AgendamentoService(LyraDbContext db) : IAgendamentoService
             a.Status,
             a.Observacoes,
             a.DataCriacao,
-            a.DataAtualizacao);
+            a.DataAtualizacao,
+            a.IntervaloAposMinutos);
     }
 }

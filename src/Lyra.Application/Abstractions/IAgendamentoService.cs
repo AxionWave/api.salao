@@ -21,4 +21,6 @@ public interface IAgendamentoService
     Task<AgendamentoDto> AtualizarAsync(int empresaId, int id, SalvarAgendamentoRequest request, CancellationToken ct);
 
     Task<AgendamentoDto> AlterarStatusAsync(int empresaId, int id, string status, CancellationToken ct);
+
+    Task<HorariosLivresResponse> HorariosLivresAsync(int empresaId, HorariosLivresRequest request, CancellationToken ct);
 }

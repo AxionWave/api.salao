@@ -15,6 +15,9 @@ public sealed class LyraDbContext(DbContextOptions<LyraDbContext> options) : DbC
     public DbSet<Disponibilidade> Disponibilidades => Set<Disponibilidade>();
     public DbSet<Agendamento> Agendamentos => Set<Agendamento>();
     public DbSet<AgendamentoItem> AgendamentoItens => Set<AgendamentoItem>();
+    public DbSet<EmpresaConfig> EmpresaConfigs => Set<EmpresaConfig>();
+    public DbSet<Bloqueio> Bloqueios => Set<Bloqueio>();
+    public DbSet<ServicoProfissional> ServicoProfissionais => Set<ServicoProfissional>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

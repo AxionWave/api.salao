@@ -6,9 +6,12 @@ public sealed class Servico
     public int EmpresaId { get; set; }
     public string Nome { get; set; } = string.Empty;
     public int DuracaoMinutos { get; set; }
+    /// <summary>Tempo de preparo/limpeza depois do atendimento, em que o profissional fica indisponível.</summary>
+    public int IntervaloAposMinutos { get; set; }
     public decimal Preco { get; set; }
     public string? Categoria { get; set; }
     public bool Ativo { get; set; } = true;
     public DateTime DataCriacao { get; set; } = DateTime.UtcNow;
     public DateTime? DataAtualizacao { get; set; }
+    public ICollection<ServicoProfissional> Profissionais { get; set; } = [];
 }

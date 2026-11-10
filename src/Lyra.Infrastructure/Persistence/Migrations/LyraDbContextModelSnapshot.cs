@@ -23,6 +23,165 @@ namespace Lyra.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Lyra.Infrastructure.Persistence.Entities.Agendamento", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ClienteId")
+                        .HasColumnType("integer")
+                        .HasColumnName("cliente_id");
+
+                    b.Property<DateTime?>("DataAtualizacao")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("data_atualizacao");
+
+                    b.Property<DateTime>("DataCriacao")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("data_criacao");
+
+                    b.Property<int>("EmpresaId")
+                        .HasColumnType("integer")
+                        .HasColumnName("empresa_id");
+
+                    b.Property<DateTime>("Fim")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("fim");
+
+                    b.Property<DateTime>("Inicio")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("inicio");
+
+                    b.Property<int>("IntervaloAposMinutos")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("intervalo_apos_minutos");
+
+                    b.Property<string>("Observacoes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("observacoes");
+
+                    b.Property<int>("ProfissionalId")
+                        .HasColumnType("integer")
+                        .HasColumnName("profissional_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClienteId");
+
+                    b.HasIndex("EmpresaId")
+                        .HasDatabaseName("ix_agendamentos_empresa_id");
+
+                    b.HasIndex("ProfissionalId");
+
+                    b.HasIndex("EmpresaId", "Inicio")
+                        .HasDatabaseName("ix_agendamentos_empresa_inicio");
+
+                    b.HasIndex("EmpresaId", "ProfissionalId", "Inicio", "Fim")
+                        .HasDatabaseName("ix_agendamentos_empresa_profissional_intervalo");
+
+                    b.ToTable("agendamentos", "lyra");
+                });
+
+            modelBuilder.Entity("Lyra.Infrastructure.Persistence.Entities.AgendamentoItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AgendamentoId")
+                        .HasColumnType("integer")
+                        .HasColumnName("agendamento_id");
+
+                    b.Property<int>("DuracaoMinutos")
+                        .HasColumnType("integer")
+                        .HasColumnName("duracao_minutos");
+
+                    b.Property<int>("Ordem")
+                        .HasColumnType("integer")
+                        .HasColumnName("ordem");
+
+                    b.Property<decimal>("Preco")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("preco");
+
+                    b.Property<int>("ServicoId")
+                        .HasColumnType("integer")
+                        .HasColumnName("servico_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AgendamentoId")
+                        .HasDatabaseName("ix_agendamento_itens_agendamento_id");
+
+                    b.HasIndex("ServicoId");
+
+                    b.HasIndex("AgendamentoId", "Ordem")
+                        .HasDatabaseName("ix_agendamento_itens_agendamento_ordem");
+
+                    b.ToTable("agendamento_itens", "lyra");
+                });
+
+            modelBuilder.Entity("Lyra.Infrastructure.Persistence.Entities.Bloqueio", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("DataCriacao")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("data_criacao");
+
+                    b.Property<int>("EmpresaId")
+                        .HasColumnType("integer")
+                        .HasColumnName("empresa_id");
+
+                    b.Property<DateTime>("Fim")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("fim");
+
+                    b.Property<DateTime>("Inicio")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("inicio");
+
+                    b.Property<string>("Motivo")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("motivo");
+
+                    b.Property<int?>("ProfissionalId")
+                        .HasColumnType("integer")
+                        .HasColumnName("profissional_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProfissionalId");
+
+                    b.HasIndex("EmpresaId", "Inicio", "Fim")
+                        .HasDatabaseName("ix_bloqueios_empresa_periodo");
+
+                    b.ToTable("bloqueios", "lyra");
+                });
+
             modelBuilder.Entity("Lyra.Infrastructure.Persistence.Entities.Cliente", b =>
                 {
                     b.Property<int>("Id")
@@ -87,7 +246,7 @@ namespace Lyra.Infrastructure.Persistence.Migrations
                     b.ToTable("clientes", "lyra");
                 });
 
-            modelBuilder.Entity("Lyra.Infrastructure.Persistence.Entities.Agendamento", b =>
+            modelBuilder.Entity("Lyra.Infrastructure.Persistence.Entities.Disponibilidade", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -96,9 +255,86 @@ namespace Lyra.Infrastructure.Persistence.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<int>("ClienteId")
+                    b.Property<int>("DiaSemana")
                         .HasColumnType("integer")
-                        .HasColumnName("cliente_id");
+                        .HasColumnName("dia_semana");
+
+                    b.Property<TimeOnly>("Fim")
+                        .HasColumnType("time")
+                        .HasColumnName("fim");
+
+                    b.Property<TimeOnly>("Inicio")
+                        .HasColumnType("time")
+                        .HasColumnName("inicio");
+
+                    b.Property<int>("ProfissionalId")
+                        .HasColumnType("integer")
+                        .HasColumnName("profissional_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProfissionalId")
+                        .HasDatabaseName("ix_disponibilidades_profissional_id");
+
+                    b.HasIndex("ProfissionalId", "DiaSemana")
+                        .HasDatabaseName("ix_disponibilidades_profissional_dia");
+
+                    b.ToTable("disponibilidades", "lyra");
+                });
+
+            modelBuilder.Entity("Lyra.Infrastructure.Persistence.Entities.EmpresaConfig", b =>
+                {
+                    b.Property<int>("EmpresaId")
+                        .HasColumnType("integer")
+                        .HasColumnName("empresa_id");
+
+                    b.Property<DateTime?>("DataAtualizacao")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("data_atualizacao");
+
+                    b.Property<DateTime>("DataCriacao")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("data_criacao");
+
+                    b.Property<string>("FusoHorario")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("fuso_horario");
+
+                    b.Property<string>("Segmento")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("segmento");
+
+                    b.Property<string>("Terminologia")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("terminologia");
+
+                    b.HasKey("EmpresaId");
+
+                    b.ToTable("empresa_config", "lyra");
+                });
+
+            modelBuilder.Entity("Lyra.Infrastructure.Persistence.Entities.Profissional", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Ativo")
+                        .HasColumnType("boolean")
+                        .HasColumnName("ativo");
+
+                    b.Property<string>("Cor")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("cor");
 
                     b.Property<DateTime?>("DataAtualizacao")
                         .HasColumnType("timestamp with time zone")
@@ -112,88 +348,31 @@ namespace Lyra.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("empresa_id");
 
-                    b.Property<DateTime>("Fim")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("fim");
-
-                    b.Property<DateTime>("Inicio")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("inicio");
-
-                    b.Property<string>("Observacoes")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)")
-                        .HasColumnName("observacoes");
-
-                    b.Property<int>("ProfissionalId")
-                        .HasColumnType("integer")
-                        .HasColumnName("profissional_id");
-
-                    b.Property<string>("Status")
+                    b.Property<string>("Nome")
                         .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("status");
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("apelido");
+
+                    b.Property<int?>("PessoaId")
+                        .HasColumnType("integer")
+                        .HasColumnName("pessoa_id");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("ClienteId");
-
-                    b.HasIndex("ProfissionalId");
 
                     b.HasIndex("EmpresaId")
-                        .HasDatabaseName("ix_agendamentos_empresa_id");
+                        .HasDatabaseName("ix_profissionais_empresa_id");
 
-                    b.HasIndex("EmpresaId", "Inicio")
-                        .HasDatabaseName("ix_agendamentos_empresa_inicio");
+                    b.HasIndex("EmpresaId", "Nome")
+                        .IsUnique()
+                        .HasDatabaseName("ux_profissionais_empresa_apelido");
 
-                    b.HasIndex("EmpresaId", "ProfissionalId", "Inicio", "Fim")
-                        .HasDatabaseName("ix_agendamentos_empresa_profissional_intervalo");
+                    b.HasIndex("EmpresaId", "PessoaId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_profissionais_empresa_pessoa")
+                        .HasFilter("pessoa_id IS NOT NULL");
 
-                    b.ToTable("agendamentos", "lyra");
-                });
-
-            modelBuilder.Entity("Lyra.Infrastructure.Persistence.Entities.AgendamentoItem", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("AgendamentoId")
-                        .HasColumnType("integer")
-                        .HasColumnName("agendamento_id");
-
-                    b.Property<int>("DuracaoMinutos")
-                        .HasColumnType("integer")
-                        .HasColumnName("duracao_minutos");
-
-                    b.Property<int>("Ordem")
-                        .HasColumnType("integer")
-                        .HasColumnName("ordem");
-
-                    b.Property<decimal>("Preco")
-                        .HasPrecision(12, 2)
-                        .HasColumnType("numeric(12,2)")
-                        .HasColumnName("preco");
-
-                    b.Property<int>("ServicoId")
-                        .HasColumnType("integer")
-                        .HasColumnName("servico_id");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AgendamentoId")
-                        .HasDatabaseName("ix_agendamento_itens_agendamento_id");
-
-                    b.HasIndex("ServicoId");
-
-                    b.HasIndex("AgendamentoId", "Ordem")
-                        .HasDatabaseName("ix_agendamento_itens_agendamento_ordem");
-
-                    b.ToTable("agendamento_itens", "lyra");
+                    b.ToTable("profissionais", "lyra");
                 });
 
             modelBuilder.Entity("Lyra.Infrastructure.Persistence.Entities.Servico", b =>
@@ -230,6 +409,12 @@ namespace Lyra.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("empresa_id");
 
+                    b.Property<int>("IntervaloAposMinutos")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("intervalo_apos_minutos");
+
                     b.Property<string>("Nome")
                         .IsRequired()
                         .HasMaxLength(120)
@@ -253,99 +438,22 @@ namespace Lyra.Infrastructure.Persistence.Migrations
                     b.ToTable("servicos", "lyra");
                 });
 
-            modelBuilder.Entity("Lyra.Infrastructure.Persistence.Entities.Profissional", b =>
+            modelBuilder.Entity("Lyra.Infrastructure.Persistence.Entities.ServicoProfissional", b =>
                 {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
+                    b.Property<int>("ServicoId")
                         .HasColumnType("integer")
-                        .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Nome")
-                        .IsRequired()
-                        .HasMaxLength(120)
-                        .HasColumnType("character varying(120)")
-                        .HasColumnName("apelido");
-
-                    b.Property<bool>("Ativo")
-                        .HasColumnType("boolean")
-                        .HasColumnName("ativo");
-
-                    b.Property<string>("Cor")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("cor");
-
-                    b.Property<DateTime?>("DataAtualizacao")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("data_atualizacao");
-
-                    b.Property<DateTime>("DataCriacao")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("data_criacao");
-
-                    b.Property<int>("EmpresaId")
-                        .HasColumnType("integer")
-                        .HasColumnName("empresa_id");
-
-                    b.Property<int?>("PessoaId")
-                        .HasColumnType("integer")
-                        .HasColumnName("pessoa_id");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("EmpresaId")
-                        .HasDatabaseName("ix_profissionais_empresa_id");
-
-                    b.HasIndex("EmpresaId", "Nome")
-                        .IsUnique()
-                        .HasDatabaseName("ux_profissionais_empresa_apelido");
-
-                    b.HasIndex("EmpresaId", "PessoaId")
-                        .IsUnique()
-                        .HasDatabaseName("ux_profissionais_empresa_pessoa")
-                        .HasFilter("pessoa_id IS NOT NULL");
-
-                    b.ToTable("profissionais", "lyra");
-                });
-
-            modelBuilder.Entity("Lyra.Infrastructure.Persistence.Entities.Disponibilidade", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("DiaSemana")
-                        .HasColumnType("integer")
-                        .HasColumnName("dia_semana");
-
-                    b.Property<TimeOnly>("Fim")
-                        .HasColumnType("time")
-                        .HasColumnName("fim");
-
-                    b.Property<TimeOnly>("Inicio")
-                        .HasColumnType("time")
-                        .HasColumnName("inicio");
+                        .HasColumnName("servico_id");
 
                     b.Property<int>("ProfissionalId")
                         .HasColumnType("integer")
                         .HasColumnName("profissional_id");
 
-                    b.HasKey("Id");
+                    b.HasKey("ServicoId", "ProfissionalId");
 
                     b.HasIndex("ProfissionalId")
-                        .HasDatabaseName("ix_disponibilidades_profissional_id");
+                        .HasDatabaseName("ix_servico_profissionais_profissional");
 
-                    b.HasIndex("ProfissionalId", "DiaSemana")
-                        .IsUnique()
-                        .HasDatabaseName("ux_disponibilidades_profissional_dia");
-
-                    b.ToTable("disponibilidades", "lyra");
+                    b.ToTable("servico_profissionais", "lyra");
                 });
 
             modelBuilder.Entity("Lyra.Infrastructure.Persistence.Entities.Agendamento", b =>
@@ -386,6 +494,16 @@ namespace Lyra.Infrastructure.Persistence.Migrations
                     b.Navigation("Servico");
                 });
 
+            modelBuilder.Entity("Lyra.Infrastructure.Persistence.Entities.Bloqueio", b =>
+                {
+                    b.HasOne("Lyra.Infrastructure.Persistence.Entities.Profissional", "Profissional")
+                        .WithMany()
+                        .HasForeignKey("ProfissionalId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("Profissional");
+                });
+
             modelBuilder.Entity("Lyra.Infrastructure.Persistence.Entities.Disponibilidade", b =>
                 {
                     b.HasOne("Lyra.Infrastructure.Persistence.Entities.Profissional", "Profissional")
@@ -397,14 +515,38 @@ namespace Lyra.Infrastructure.Persistence.Migrations
                     b.Navigation("Profissional");
                 });
 
-            modelBuilder.Entity("Lyra.Infrastructure.Persistence.Entities.Profissional", b =>
+            modelBuilder.Entity("Lyra.Infrastructure.Persistence.Entities.ServicoProfissional", b =>
                 {
-                    b.Navigation("Disponibilidades");
+                    b.HasOne("Lyra.Infrastructure.Persistence.Entities.Profissional", "Profissional")
+                        .WithMany()
+                        .HasForeignKey("ProfissionalId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Lyra.Infrastructure.Persistence.Entities.Servico", "Servico")
+                        .WithMany("Profissionais")
+                        .HasForeignKey("ServicoId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Profissional");
+
+                    b.Navigation("Servico");
                 });
 
             modelBuilder.Entity("Lyra.Infrastructure.Persistence.Entities.Agendamento", b =>
                 {
                     b.Navigation("Itens");
+                });
+
+            modelBuilder.Entity("Lyra.Infrastructure.Persistence.Entities.Profissional", b =>
+                {
+                    b.Navigation("Disponibilidades");
+                });
+
+            modelBuilder.Entity("Lyra.Infrastructure.Persistence.Entities.Servico", b =>
+                {
+                    b.Navigation("Profissionais");
                 });
 #pragma warning restore 612, 618
         }

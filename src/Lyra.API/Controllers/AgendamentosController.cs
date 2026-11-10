@@ -36,6 +36,25 @@ public sealed class AgendamentosController(IAgendamentoService agendamentos, ICu
         return Ok(await agendamentos.OpcoesAsync(empresaId, ct));
     }
 
+    /// <summary>Horários em que o(s) serviço(s) cabem, por profissional, num dia do calendário da empresa.</summary>
+    [HttpGet("horarios-livres")]
+    public async Task<ActionResult<HorariosLivresResponse>> HorariosLivres(
+        [FromQuery] DateOnly data,
+        [FromQuery] int[] servicoIds,
+        [FromQuery] int? profissionalId,
+        [FromQuery] int? ignorarAgendamentoId,
+        [FromQuery] int? passo,
+        CancellationToken ct)
+    {
+        if (!TryEmpresa(out var empresaId, out var erro)) return erro;
+        if (data == default)
+        {
+            return BadRequest(new { error = "validation_error", message = "Informe a data (AAAA-MM-DD)." });
+        }
+        var request = new HorariosLivresRequest(data, servicoIds, profissionalId, ignorarAgendamentoId, passo ?? 15);
+        return Ok(await agendamentos.HorariosLivresAsync(empresaId, request, ct));
+    }
+
     [HttpGet("{id:int}")]
     public async Task<ActionResult<AgendamentoDto>> Obter(int id, CancellationToken ct)
     {

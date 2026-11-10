@@ -17,7 +17,6 @@ public sealed class DisponibilidadeConfiguration : IEntityTypeConfiguration<Disp
         builder.Property(x => x.Fim).HasColumnName("fim").HasColumnType("time").IsRequired();
         builder.HasIndex(x => x.ProfissionalId).HasDatabaseName("ix_disponibilidades_profissional_id");
         builder.HasIndex(x => new { x.ProfissionalId, x.DiaSemana })
-            .IsUnique()
-            .HasDatabaseName("ux_disponibilidades_profissional_dia");
+            .HasDatabaseName("ix_disponibilidades_profissional_dia");
     }
 }

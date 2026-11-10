@@ -8,6 +8,8 @@ public sealed class Agendamento
     public int ProfissionalId { get; set; }
     public DateTime Inicio { get; set; }
     public DateTime Fim { get; set; }
+    /// <summary>Preparo depois do atendimento (cópia do serviço na hora de marcar). Ocupa a agenda até Fim + este valor.</summary>
+    public int IntervaloAposMinutos { get; set; }
     public string Status { get; set; } = "agendado";
     public string? Observacoes { get; set; }
     public DateTime DataCriacao { get; set; } = DateTime.UtcNow;

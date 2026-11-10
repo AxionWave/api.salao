@@ -16,6 +16,7 @@ public sealed class AgendamentoConfiguration : IEntityTypeConfiguration<Agendame
         builder.Property(x => x.ProfissionalId).HasColumnName("profissional_id").IsRequired();
         builder.Property(x => x.Inicio).HasColumnName("inicio").IsRequired();
         builder.Property(x => x.Fim).HasColumnName("fim").IsRequired();
+        builder.Property(x => x.IntervaloAposMinutos).HasColumnName("intervalo_apos_minutos").HasDefaultValue(0).IsRequired();
         builder.Property(x => x.Status).HasColumnName("status").HasMaxLength(20).IsRequired();
         builder.Property(x => x.Observacoes).HasColumnName("observacoes").HasMaxLength(1000);
         builder.Property(x => x.DataCriacao).HasColumnName("data_criacao").IsRequired();

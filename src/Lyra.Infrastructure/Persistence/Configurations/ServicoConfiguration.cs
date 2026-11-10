@@ -14,6 +14,7 @@ public sealed class ServicoConfiguration : IEntityTypeConfiguration<Servico>
         builder.Property(x => x.EmpresaId).HasColumnName("empresa_id").IsRequired();
         builder.Property(x => x.Nome).HasColumnName("nome").HasMaxLength(120).IsRequired();
         builder.Property(x => x.DuracaoMinutos).HasColumnName("duracao_minutos").IsRequired();
+        builder.Property(x => x.IntervaloAposMinutos).HasColumnName("intervalo_apos_minutos").HasDefaultValue(0).IsRequired();
         builder.Property(x => x.Preco).HasColumnName("preco").HasPrecision(12, 2).IsRequired();
         builder.Property(x => x.Categoria).HasColumnName("categoria").HasMaxLength(80);
         builder.Property(x => x.Ativo).HasColumnName("ativo").IsRequired();

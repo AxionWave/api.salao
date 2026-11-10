@@ -24,7 +24,8 @@ public sealed record AgendamentoDto(
     string Status,
     string? Observacoes,
     DateTime DataCriacao,
-    DateTime? DataAtualizacao);
+    DateTime? DataAtualizacao,
+    int IntervaloAposMinutos);
 
 public sealed record SalvarAgendamentoRequest(
     int ClienteId,
@@ -43,15 +44,41 @@ public sealed record ProfissionalAgendaDto(
 
 public sealed record IntervaloAgendaDto(int DiaSemana, string Inicio, string Fim);
 
+/// <param name="ProfissionalIds">Quem atende. Vazio = todos.</param>
 public sealed record ServicoAgendaDto(
     int Id,
     string Nome,
     int DuracaoMinutos,
-    decimal Preco);
+    decimal Preco,
+    int IntervaloAposMinutos,
+    IReadOnlyList<int> ProfissionalIds);
 
 public sealed record OpcoesAgendaResponse(
     IReadOnlyList<ProfissionalAgendaDto> Profissionais,
-    IReadOnlyList<ServicoAgendaDto> Servicos);
+    IReadOnlyList<ServicoAgendaDto> Servicos,
+    string FusoHorario);
+
+/// <param name="Data">Dia no calendário da empresa.</param>
+/// <param name="IgnorarAgendamentoId">Ao remarcar, o próprio agendamento não conta como ocupado.</param>
+public sealed record HorariosLivresRequest(
+    DateOnly Data,
+    IReadOnlyList<int> ServicoIds,
+    int? ProfissionalId,
+    int? IgnorarAgendamentoId,
+    int PassoMinutos = 15);
+
+public sealed record HorarioLivreDto(DateTime Inicio, string Hora);
+
+public sealed record HorariosLivresProfissionalDto(
+    int ProfissionalId,
+    string Nome,
+    IReadOnlyList<HorarioLivreDto> Horarios);
+
+public sealed record HorariosLivresResponse(
+    DateOnly Data,
+    int DuracaoMinutos,
+    string FusoHorario,
+    IReadOnlyList<HorariosLivresProfissionalDto> Profissionais);
 
 public sealed record ListaAgendamentosResponse(
     IReadOnlyList<AgendamentoDto> Items);

@@ -9,6 +9,8 @@ namespace Lyra.Infrastructure.Services;
 
 public sealed class ServicoService(LyraDbContext db) : IServicoService
 {
+    public const int MaxIntervaloAposMinutos = 240;
+
     public async Task<ListaServicosResponse> ListarAsync(
         int empresaId,
         string? busca,
@@ -20,7 +22,7 @@ public sealed class ServicoService(LyraDbContext db) : IServicoService
         page = page < 1 ? 1 : page;
         pageSize = pageSize is < 1 or > 100 ? 10 : pageSize;
 
-        var q = db.Servicos.AsNoTracking().Where(s => s.EmpresaId == empresaId);
+        var q = db.Servicos.AsNoTracking().Include(s => s.Profissionais).Where(s => s.EmpresaId == empresaId);
         if (ativo is bool flag)
         {
             q = q.Where(s => s.Ativo == flag);
@@ -48,12 +50,19 @@ public sealed class ServicoService(LyraDbContext db) : IServicoService
             .OrderBy(c => c)
             .ToListAsync(ct);
 
-        return new ListaServicosResponse(itens.Select(Map).ToList(), total, page, pageSize, categorias);
+        var profissionais = await db.Profissionais.AsNoTracking()
+            .Where(p => p.EmpresaId == empresaId && p.Ativo)
+            .OrderBy(p => p.Nome)
+            .Select(p => new ProfissionalResumoDto(p.Id, p.Nome, p.Cor))
+            .ToListAsync(ct);
+
+        return new ListaServicosResponse(itens.Select(Map).ToList(), total, page, pageSize, categorias, profissionais);
     }
 
     public async Task<ServicoDto?> ObterAsync(int empresaId, int id, CancellationToken ct)
     {
         var s = await db.Servicos.AsNoTracking()
+            .Include(x => x.Profissionais)
             .FirstOrDefaultAsync(x => x.Id == id && x.EmpresaId == empresaId, ct);
         return s is null ? null : Map(s);
     }
@@ -62,6 +71,7 @@ public sealed class ServicoService(LyraDbContext db) : IServicoService
     {
         var entidade = new Servico { EmpresaId = empresaId };
         Aplicar(entidade, request);
+        await AplicarProfissionaisAsync(entidade, empresaId, request.ProfissionalIds, ct);
         entidade.DataCriacao = DateTime.UtcNow;
         db.Servicos.Add(entidade);
         await SalvarAsync(ct);
@@ -70,9 +80,12 @@ public sealed class ServicoService(LyraDbContext db) : IServicoService
 
     public async Task<ServicoDto> AtualizarAsync(int empresaId, int id, SalvarServicoRequest request, CancellationToken ct)
     {
-        var entidade = await db.Servicos.FirstOrDefaultAsync(x => x.Id == id && x.EmpresaId == empresaId, ct)
+        var entidade = await db.Servicos
+            .Include(x => x.Profissionais)
+            .FirstOrDefaultAsync(x => x.Id == id && x.EmpresaId == empresaId, ct)
             ?? throw new KeyNotFoundException("Serviço não encontrado.");
         Aplicar(entidade, request);
+        await AplicarProfissionaisAsync(entidade, empresaId, request.ProfissionalIds, ct);
         entidade.DataAtualizacao = DateTime.UtcNow;
         await SalvarAsync(ct);
         return Map(entidade);
@@ -80,7 +93,9 @@ public sealed class ServicoService(LyraDbContext db) : IServicoService
 
     public async Task<ServicoDto> AlterarAtivoAsync(int empresaId, int id, bool ativo, CancellationToken ct)
     {
-        var entidade = await db.Servicos.FirstOrDefaultAsync(x => x.Id == id && x.EmpresaId == empresaId, ct)
+        var entidade = await db.Servicos
+            .Include(x => x.Profissionais)
+            .FirstOrDefaultAsync(x => x.Id == id && x.EmpresaId == empresaId, ct)
             ?? throw new KeyNotFoundException("Serviço não encontrado.");
         entidade.Ativo = ativo;
         entidade.DataAtualizacao = DateTime.UtcNow;
@@ -123,6 +138,10 @@ public sealed class ServicoService(LyraDbContext db) : IServicoService
         {
             throw new ArgumentException("Preço não pode ser negativo.");
         }
+        if (request.IntervaloAposMinutos is < 0 or > MaxIntervaloAposMinutos)
+        {
+            throw new ArgumentException($"O preparo depois do atendimento deve ser entre 0 e {MaxIntervaloAposMinutos} minutos.");
+        }
 
         var categoria = string.IsNullOrWhiteSpace(request.Categoria) ? null : request.Categoria.Trim();
         if (categoria is { Length: > 80 })
@@ -135,6 +154,40 @@ public sealed class ServicoService(LyraDbContext db) : IServicoService
         entidade.Preco = decimal.Round(request.Preco, 2, MidpointRounding.AwayFromZero);
         entidade.Categoria = categoria;
         entidade.Ativo = request.Ativo;
+        entidade.IntervaloAposMinutos = request.IntervaloAposMinutos;
+    }
+
+    private async Task AplicarProfissionaisAsync(
+        Servico entidade,
+        int empresaId,
+        IReadOnlyList<int>? profissionalIds,
+        CancellationToken ct)
+    {
+        if (profissionalIds is null)
+        {
+            return;
+        }
+
+        var ids = profissionalIds.Distinct().ToList();
+        var validos = await db.Profissionais.AsNoTracking()
+            .Where(p => p.EmpresaId == empresaId && ids.Contains(p.Id))
+            .Select(p => p.Id)
+            .ToListAsync(ct);
+        if (validos.Count != ids.Count)
+        {
+            throw new ArgumentException("Profissional não encontrado nesta empresa.");
+        }
+
+        var manter = ids.ToHashSet();
+        foreach (var vinculo in entidade.Profissionais.Where(v => !manter.Contains(v.ProfissionalId)).ToList())
+        {
+            entidade.Profissionais.Remove(vinculo);
+        }
+        var atuais = entidade.Profissionais.Select(v => v.ProfissionalId).ToHashSet();
+        foreach (var id in ids.Where(id => !atuais.Contains(id)))
+        {
+            entidade.Profissionais.Add(new ServicoProfissional { ProfissionalId = id });
+        }
     }
 
     private static ServicoDto Map(Servico s) => new(
@@ -146,5 +199,7 @@ public sealed class ServicoService(LyraDbContext db) : IServicoService
         s.Categoria,
         s.Ativo,
         s.DataCriacao,
-        s.DataAtualizacao);
+        s.DataAtualizacao,
+        s.IntervaloAposMinutos,
+        s.Profissionais.Select(v => v.ProfissionalId).Order().ToList());
 }

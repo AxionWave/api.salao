@@ -12,6 +12,7 @@ public sealed class ProfissionalService(LyraDbContext db) : IProfissionalService
     private static readonly HashSet<string> Cores = ["copper", "ember", "ok", "warn", "destructive"];
     private static readonly TimeOnly PadraoInicio = new(9, 0);
     private static readonly TimeOnly PadraoFim = new(19, 0);
+    private const int MaxFaixasPorDia = 6;
 
     public async Task<ListaProfissionaisResponse> ListarAsync(
         int empresaId,
@@ -178,17 +179,12 @@ public sealed class ProfissionalService(LyraDbContext db) : IProfissionalService
             return [];
         }
 
-        var vistos = new HashSet<int>();
-        var result = new List<(int, TimeOnly, TimeOnly)>();
+        var result = new List<(int Dia, TimeOnly Inicio, TimeOnly Fim)>();
         foreach (var item in lista)
         {
             if (item.DiaSemana is < 0 or > 6)
             {
                 throw new ArgumentException("Dia da semana deve ser 0 (domingo) a 6 (sábado).");
-            }
-            if (!vistos.Add(item.DiaSemana))
-            {
-                throw new ArgumentException("Há dois intervalos no mesmo dia.");
             }
             if (!TimeOnly.TryParse(item.Inicio, out var inicio) || !TimeOnly.TryParse(item.Fim, out var fim))
             {
@@ -200,7 +196,24 @@ public sealed class ProfissionalService(LyraDbContext db) : IProfissionalService
             }
             result.Add((item.DiaSemana, inicio, fim));
         }
-        return result;
+
+        foreach (var dia in result.GroupBy(r => r.Dia))
+        {
+            if (dia.Count() > MaxFaixasPorDia)
+            {
+                throw new ArgumentException($"Use no máximo {MaxFaixasPorDia} faixas de horário por dia.");
+            }
+            var ordenadas = dia.OrderBy(r => r.Inicio).ToList();
+            for (var i = 1; i < ordenadas.Count; i++)
+            {
+                if (ordenadas[i].Inicio < ordenadas[i - 1].Fim)
+                {
+                    throw new ArgumentException("Há faixas de horário sobrepostas no mesmo dia.");
+                }
+            }
+        }
+
+        return result.OrderBy(r => r.Dia).ThenBy(r => r.Inicio).ToList();
     }
 
     private static List<(int Dia, TimeOnly Inicio, TimeOnly Fim)> PadraoSemanal()
@@ -222,6 +235,7 @@ public sealed class ProfissionalService(LyraDbContext db) : IProfissionalService
         p.Ativo,
         p.Disponibilidades
             .OrderBy(d => d.DiaSemana)
+            .ThenBy(d => d.Inicio)
             .Select(d => new IntervaloDto(d.DiaSemana, d.Inicio.ToString("HH:mm"), d.Fim.ToString("HH:mm")))
             .ToList(),
         p.DataCriacao,
