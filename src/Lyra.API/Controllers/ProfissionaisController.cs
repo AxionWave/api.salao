@@ -89,6 +89,27 @@ public sealed class ProfissionaisController(IProfissionalService profissionais, 
         }
     }
 
+    [HttpPost("{id:int}/impacto")]
+    public async Task<ActionResult<ImpactoProfissionalResponse>> Impacto(
+        int id,
+        [FromBody] ImpactoProfissionalRequest request,
+        CancellationToken ct)
+    {
+        if (!TryEmpresa(out var empresaId, out var erro)) return erro;
+        try
+        {
+            return Ok(await profissionais.ImpactoAsync(empresaId, id, request, ct));
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound(new { error = "not_found", message = "Profissional não encontrado." });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = "validation_error", message = ex.Message });
+        }
+    }
+
     private bool TryEmpresa(out int empresaId, out ActionResult erro)
     {
         var user = currentUser.User;

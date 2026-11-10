@@ -1,4 +1,5 @@
 using Lyra.Application.Abstractions;
+using Lyra.Application.Agendamentos;
 using Lyra.Application.Profissionais;
 using Lyra.Infrastructure.Persistence;
 using Lyra.Infrastructure.Persistence.Entities;
@@ -13,6 +14,7 @@ public sealed class ProfissionalService(LyraDbContext db) : IProfissionalService
     private static readonly TimeOnly PadraoInicio = new(9, 0);
     private static readonly TimeOnly PadraoFim = new(19, 0);
     private const int MaxFaixasPorDia = 6;
+    private const int MaxItensImpacto = 20;
 
     public async Task<ListaProfissionaisResponse> ListarAsync(
         int empresaId,
@@ -94,6 +96,58 @@ public sealed class ProfissionalService(LyraDbContext db) : IProfissionalService
         entidade.DataAtualizacao = DateTime.UtcNow;
         await SalvarAsync(ct);
         return Map(entidade);
+    }
+
+    public async Task<ImpactoProfissionalResponse> ImpactoAsync(
+        int empresaId,
+        int id,
+        ImpactoProfissionalRequest request,
+        CancellationToken ct)
+    {
+        if (!await db.Profissionais.AnyAsync(p => p.Id == id && p.EmpresaId == empresaId, ct))
+        {
+            throw new KeyNotFoundException("Profissional não encontrado.");
+        }
+        var faixas = request.Ativo ? NormalizarIntervalos(request.Disponibilidades) : [];
+        if (request.Ativo && faixas.Count == 0)
+        {
+            return new ImpactoProfissionalResponse(0, []);
+        }
+
+        var agora = DateTime.UtcNow;
+        var futuros = await db.Agendamentos.AsNoTracking()
+            .Where(a => a.EmpresaId == empresaId
+                && a.ProfissionalId == id
+                && a.Fim > agora
+                && (a.Status == StatusAgendamento.Agendado
+                    || a.Status == StatusAgendamento.Confirmado
+                    || a.Status == StatusAgendamento.EmAtendimento))
+            .OrderBy(a => a.Inicio)
+            .Select(a => new AgendamentoAfetadoDto(a.Id, a.Inicio, a.Fim, a.Cliente.Nome, a.Status))
+            .ToListAsync(ct);
+
+        if (request.Ativo)
+        {
+            var fuso = await FusoHorarioEmpresa.ObterAsync(db, empresaId, ct);
+            futuros = futuros.Where(a => !CabeNoExpediente(faixas, a.Inicio, a.Fim, fuso)).ToList();
+        }
+        return new ImpactoProfissionalResponse(futuros.Count, futuros.Take(MaxItensImpacto).ToList());
+    }
+
+    private static bool CabeNoExpediente(
+        List<(int Dia, TimeOnly Inicio, TimeOnly Fim)> faixas,
+        DateTime inicio,
+        DateTime fim,
+        TimeZoneInfo fuso)
+    {
+        var localInicio = TimeZoneInfo.ConvertTimeFromUtc(inicio, fuso);
+        var localFim = TimeZoneInfo.ConvertTimeFromUtc(fim, fuso);
+        var minutoInicio = localInicio.TimeOfDay.TotalMinutes;
+        var minutoFim = (localFim - localInicio.Date).TotalMinutes;
+        return faixas.Any(f =>
+            f.Dia == (int)localInicio.DayOfWeek
+            && f.Inicio.ToTimeSpan().TotalMinutes <= minutoInicio
+            && minutoFim <= f.Fim.ToTimeSpan().TotalMinutes);
     }
 
     private async Task SalvarAsync(CancellationToken ct)

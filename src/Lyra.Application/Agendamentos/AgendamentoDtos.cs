@@ -39,11 +39,13 @@ public sealed record SalvarAgendamentoRequest(
 /// <param name="Motivo">Opcional, guardado ao cancelar.</param>
 public sealed record AlterarStatusRequest(string Status, string? Motivo = null);
 
+/// <param name="Ativo">Inativos só vêm quando ainda têm agendamentos, para continuarem visíveis na grade.</param>
 public sealed record ProfissionalAgendaDto(
     int Id,
     string Nome,
     string Cor,
-    IReadOnlyList<IntervaloAgendaDto> Disponibilidades);
+    IReadOnlyList<IntervaloAgendaDto> Disponibilidades,
+    bool Ativo = true);
 
 public sealed record IntervaloAgendaDto(int DiaSemana, string Inicio, string Fim);
 

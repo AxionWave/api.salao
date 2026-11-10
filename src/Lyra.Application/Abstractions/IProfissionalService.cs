@@ -9,4 +9,5 @@ public interface IProfissionalService
     Task<ProfissionalDto> CriarAsync(int empresaId, SalvarProfissionalRequest request, CancellationToken ct);
     Task<ProfissionalDto> AtualizarAsync(int empresaId, int id, SalvarProfissionalRequest request, CancellationToken ct);
     Task<ProfissionalDto> AlterarAtivoAsync(int empresaId, int id, bool ativo, CancellationToken ct);
+    Task<ImpactoProfissionalResponse> ImpactoAsync(int empresaId, int id, ImpactoProfissionalRequest request, CancellationToken ct);
 }

@@ -20,6 +20,15 @@ public sealed record SalvarProfissionalRequest(
     bool Ativo = true,
     IReadOnlyList<IntervaloDto>? Disponibilidades = null);
 
+/// <summary>Simula salvar: com <c>Ativo = false</c>, todos os futuros em aberto; senão, os que saem do novo expediente.</summary>
+public sealed record ImpactoProfissionalRequest(
+    bool Ativo = true,
+    IReadOnlyList<IntervaloDto>? Disponibilidades = null);
+
+public sealed record AgendamentoAfetadoDto(int Id, DateTime Inicio, DateTime Fim, string ClienteNome, string Status);
+
+public sealed record ImpactoProfissionalResponse(int Total, IReadOnlyList<AgendamentoAfetadoDto> Itens);
+
 public sealed record ListaProfissionaisResponse(
     IReadOnlyList<ProfissionalDto> Items,
     int Total,

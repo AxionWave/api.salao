@@ -57,7 +57,9 @@ public sealed class AgendamentoService(LyraDbContext db) : IAgendamentoService
     {
         var profissionais = await db.Profissionais.AsNoTracking()
             .Include(p => p.Disponibilidades)
-            .Where(p => p.EmpresaId == empresaId && p.Ativo)
+            .Where(p => p.EmpresaId == empresaId
+                && (p.Ativo || db.Agendamentos.Any(a =>
+                    a.ProfissionalId == p.Id && a.Status != StatusAgendamento.Cancelado)))
             .OrderBy(p => p.Nome)
             .ToListAsync(ct);
 
@@ -78,7 +80,8 @@ public sealed class AgendamentoService(LyraDbContext db) : IAgendamentoService
                     .OrderBy(d => d.DiaSemana)
                     .ThenBy(d => d.Inicio)
                     .Select(d => new IntervaloAgendaDto(d.DiaSemana, HhMm(d.Inicio), HhMm(d.Fim)))
-                    .ToList())).ToList(),
+                    .ToList(),
+                p.Ativo)).ToList(),
             servicos.Select(s => new ServicoAgendaDto(
                 s.Id,
                 s.Nome,
