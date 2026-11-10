@@ -1,0 +1,44 @@
+name: Testes
+
+on:
+  push:
+    branches:
+      - develop
+  pull_request:
+  workflow_call:
+
+concurrency:
+  group: testes-api-salao-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      LYRA_TEST_DB: Host=localhost;Port=5432;Username=postgres;Password=postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Testes de integração (API + Postgres descartável)
+        run: dotnet test tests/Lyra.Tests -c Release --logger "console;verbosity=normal"
+
+      # R-25: sem tzdata, Manaus e Lisboa caem no fuso fixo −3.
+      - name: Imagem da API tem a base de fusos
+        run: docker run --rm --entrypoint test mcr.microsoft.com/dotnet/aspnet:8.0 -f /usr/share/zoneinfo/America/Manaus

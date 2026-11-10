@@ -58,6 +58,17 @@ X-Secret-Token: <FRONTEND_SECRET_TOKEN>
 
 Sem o módulo `LYRA000000` (ou legado `LYR0000000`) no JWT → **403**.
 
+## Testes
+
+`tests/Lyra.Tests` sobe a API em memória (ambiente `Testing`, token assinado de verdade) contra um banco criado só para a execução e apagado no fim. Cada teste usa uma empresa nova. Nunca aponte para o banco de homologação ou produção.
+
+```bash
+docker run -d --name lyra-pg-testes -e POSTGRES_PASSWORD=postgres -p 55432:5432 postgres:16-alpine
+LYRA_TEST_DB="Host=localhost;Port=55432;Username=postgres;Password=postgres" dotnet test tests/Lyra.Tests
+```
+
+Sem `LYRA_TEST_DB` os testes são pulados (no CI, falham). O GitHub Actions roda a suíte em todo push na `develop` e antes de cada deploy em `production`.
+
 ## O que NÃO fazer
 
 - Novo login / tabela de usuários

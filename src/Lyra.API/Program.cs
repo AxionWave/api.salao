@@ -128,3 +128,6 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
+/// <summary>Visível para os testes de integração (WebApplicationFactory).</summary>
+public partial class Program;

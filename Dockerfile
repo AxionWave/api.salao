@@ -6,7 +6,7 @@ COPY src/Lyra.Core/Lyra.Core.csproj src/Lyra.Core/
 COPY src/Lyra.Application/Lyra.Application.csproj src/Lyra.Application/
 COPY src/Lyra.Infrastructure/Lyra.Infrastructure.csproj src/Lyra.Infrastructure/
 COPY src/Lyra.API/Lyra.API.csproj src/Lyra.API/
-RUN dotnet restore
+RUN dotnet restore src/Lyra.API/Lyra.API.csproj
 COPY src ./src
 RUN dotnet publish src/Lyra.API/Lyra.API.csproj -c Release -o /app/publish --no-restore
 
