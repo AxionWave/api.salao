@@ -3,8 +3,11 @@ using System.Net.Http.Json;
 using System.Net.Mail;
 using System.Text;
 using System.Text.Json;
+using Lyra.Application.Configuracao;
 using Lyra.Application.Notificacoes;
+using Lyra.Infrastructure.Persistence;
 using Lyra.Infrastructure.Persistence.Entities;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 namespace Lyra.Infrastructure.Notificacoes;
@@ -16,6 +19,7 @@ namespace Lyra.Infrastructure.Notificacoes;
 public sealed class CanalEmail(
     HttpClient http,
     IOptions<EmailOptions> opcoes,
+    LyraDbContext db,
     LeitorEmpresa empresas,
     LinksPublicos links) : ICanalNotificacao
 {
@@ -31,7 +35,8 @@ public sealed class CanalEmail(
     public bool Aceita(string evento, string? origem, EmpresaConfig? config) =>
         config?.EnviarEmails == true
         // Quem confirmou pelo link já viu a confirmação na tela.
-        && !(evento == EventosNotificacao.AgendamentoConfirmado && origem == FilaNotificacoes.OrigemCliente);
+        && !(evento == EventosNotificacao.AgendamentoConfirmado && origem == FilaNotificacoes.OrigemCliente)
+        && AvisosEmpresa.Ler(config.Avisos).Cliente(evento);
 
     public string? Destino(Cliente cliente)
     {
@@ -54,7 +59,13 @@ public sealed class CanalEmail(
         {
             var dados = FilaNotificacoes.LerDados(n.Dados);
             var link = n.AgendamentoId is int id ? links.Url(id) : null;
-            email = ModelosEmail.Montar(n.Evento, n.AgendamentoId ?? 0, dados, empresa, link);
+            var avisos = AvisosEmpresa.Ler(await db.EmpresaConfigs.AsNoTracking()
+                .Where(c => c.EmpresaId == n.EmpresaId)
+                .Select(c => c.Avisos)
+                .FirstOrDefaultAsync(ct));
+            var aviso = avisos.Evento(n.Evento);
+            email = ModelosEmail.Montar(n.Evento, n.AgendamentoId ?? 0, dados, empresa, link,
+                new TextosAviso(aviso.Assunto, aviso.Mensagem, avisos.Recado));
         }
 
         var corpo = new

@@ -333,6 +333,10 @@ namespace Lyra.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("empresa_id");
 
+                    b.Property<string>("Avisos")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("avisos");
+
                     b.Property<DateTime?>("DataAtualizacao")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("data_atualizacao");

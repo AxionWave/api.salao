@@ -8,13 +8,23 @@ namespace Lyra.Infrastructure.Notificacoes;
 
 public sealed record EmailMontado(string Assunto, string Html, string Texto, string? Ics);
 
-/// <summary>Textos dos e-mails ao cliente. Usa "horário" em vez da terminologia da empresa, que vale para a equipe.</summary>
+/// <summary>Textos da empresa para este evento (<see cref="ModelosAviso"/>); nulo = o padrão.</summary>
+public sealed record TextosAviso(string? Assunto, string? Mensagem, string? Recado);
+
+/// <summary>
+/// Textos dos e-mails ao cliente. Usa "horário" em vez da terminologia da empresa, que vale para a equipe;
+/// a empresa troca o assunto e a abertura em Configurações, se quiser outro nome.
+/// </summary>
 public static partial class ModelosEmail
 {
     private static readonly CultureInfo PtBr = CultureInfo.GetCultureInfo("pt-BR");
 
+    /// <summary>A Mensageria troca pelo link de descadastro do envio.</summary>
+    public const string MarcadorDescadastro = "{{descadastro}}";
+
     public static EmailMontado Montar(
-        string evento, int agendamentoId, DadosNotificacao d, EmpresaRemetente? empresa, string? linkConfirmar)
+        string evento, int agendamentoId, DadosNotificacao d, EmpresaRemetente? empresa, string? linkConfirmar,
+        TextosAviso? textos = null)
     {
         var nomeEmpresa = empresa?.Nome ?? "Lyra";
         var cancelado = evento == EventosNotificacao.AgendamentoCancelado;
@@ -55,6 +65,22 @@ public static partial class ModelosEmail
             : d.Servicos.Select(n => new ItemNotificacao { Nome = n }).ToList();
         var total = itens.Sum(i => i.Preco);
         var profissional = string.IsNullOrWhiteSpace(d.Profissional) ? null : d.Profissional.Trim();
+
+        var valores = Variaveis(evento, d, empresa, nomeEmpresa, primeiroNome, quando, antes, itens, profissional);
+        if (textos?.Assunto is { } assuntoProprio
+            && ModelosAviso.Preencher(assuntoProprio, valores).ReplaceLineEndings(" ").Trim() is { Length: > 0 } assuntoPreenchido)
+        {
+            assunto = assuntoPreenchido;
+        }
+        if (textos?.Mensagem is { } mensagemPropria
+            && ModelosAviso.Preencher(mensagemPropria, valores).Trim() is { Length: > 0 } aberturaPreenchida)
+        {
+            abertura = aberturaPreenchida;
+        }
+        var recado = !cancelado && textos?.Recado is { } recadoProprio
+            && ModelosAviso.Preencher(recadoProprio, valores).Trim() is { Length: > 0 } recadoPreenchido
+                ? recadoPreenchido
+                : null;
         var motivo = cancelado && d.Motivo is { } m && !m.Equals("Remarcado", StringComparison.OrdinalIgnoreCase) ? m : null;
         var resumo = itens.Count > 0 ? $"{string.Join(", ", itens.Select(i => i.Nome))} – {nomeEmpresa}" : nomeEmpresa;
 
@@ -84,18 +110,20 @@ public static partial class ModelosEmail
         if (empresa?.Endereco is { } endereco) texto.AppendLine($"Onde: {endereco}");
         if (motivo is not null) texto.AppendLine($"Motivo: {motivo}");
         texto.AppendLine();
+        if (recado is not null) texto.AppendLine(recado).AppendLine();
         if (botao is not null) texto.AppendLine($"Confirme sua presença: {botao}");
         if (links.Agenda is not null) texto.AppendLine($"Adicionar ao Google Agenda: {links.Agenda}");
         if (links.Mapa is not null && !cancelado) texto.AppendLine($"Como chegar: {links.Mapa}");
         if (links.WhatsApp is not null) texto.AppendLine($"WhatsApp: {links.WhatsApp}");
-        texto.AppendLine().AppendLine(fecho).AppendLine().AppendLine(rodape);
+        texto.AppendLine().AppendLine(fecho).AppendLine().AppendLine(rodape)
+            .AppendLine($"Não quer mais receber estes e-mails? {MarcadorDescadastro}");
 
         var uid = d.Cadeia > 0 ? d.Cadeia : agendamentoId;
         // O lembrete não manda convite: o evento já foi para o calendário quando o horário foi marcado.
         var ics = evento == EventosNotificacao.AgendamentoLembrete ? null : Ics(evento, uid, d, resumo, profissional, empresa?.Endereco);
         var html = Html(new Pagina(
             Estilo(evento), cancelado, ics is not null && !cancelado, nomeEmpresa, empresa, titulo, $"Olá, {primeiroNome}!", abertura,
-            quando, antes, itens, total, profissional, motivo, botao, links, fecho, rodape));
+            quando, antes, itens, total, profissional, motivo, recado, botao, links, fecho, rodape));
         return new EmailMontado(assunto, html, texto.ToString(), ics);
     }
 
@@ -109,20 +137,59 @@ public static partial class ModelosEmail
             $"Passando para lembrar do seu horário em {nomeEmpresa}: {quando.Longo}.",
             botao);
 
-        var fuso = FusoHorarioEmpresa.Resolver(string.IsNullOrEmpty(d.Fuso) ? Segmentos.FusoPadrao : d.Fuso);
-        var hoje = TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(d.Referencia ?? DateTime.UtcNow, DateTimeKind.Utc), fuso).Date;
-        var hora = dt.ToString("HH:mm", PtBr);
-        var (dia, titulo, quandoTexto) = (dt.Date - hoje).Days switch
+        var (dia, quandoTexto) = Relativo(d, quando);
+        var titulo = dia switch
         {
-            0 => ("hoje", "Seu horário é hoje", $"hoje às {hora}"),
-            1 => ("amanhã", "Seu horário é amanhã", $"amanhã ({dt.ToString("dddd", PtBr)}) às {hora}"),
-            _ => (dt.ToString("dd/MM", PtBr), "Lembrete do seu horário", quando.Longo),
+            "hoje" => "Seu horário é hoje",
+            "amanhã" => "Seu horário é amanhã",
+            _ => "Lembrete do seu horário",
         };
         return (
-            $"Lembrete: {dia} às {hora} – {nomeEmpresa}",
+            $"Lembrete: {dia} às {dt.ToString("HH:mm", PtBr)} – {nomeEmpresa}",
             titulo,
             $"Passando para lembrar: seu horário em {nomeEmpresa} é {quandoTexto}.",
             botao);
+    }
+
+    /// <summary>
+    /// "hoje", "amanhã" ou a data, contando a partir de quando o aviso foi programado (o lembrete) ou de agora;
+    /// e o dia e a hora por extenso nessa mesma linguagem.
+    /// </summary>
+    private static (string Dia, string Quando) Relativo(DadosNotificacao d, Momento quando)
+    {
+        if (quando.Data is not { } dt) return (quando.Curto, quando.Longo);
+        var fuso = FusoHorarioEmpresa.Resolver(string.IsNullOrEmpty(d.Fuso) ? Segmentos.FusoPadrao : d.Fuso);
+        var hoje = TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(d.Referencia ?? DateTime.UtcNow, DateTimeKind.Utc), fuso).Date;
+        var hora = dt.ToString("HH:mm", PtBr);
+        return (dt.Date - hoje).Days switch
+        {
+            0 => ("hoje", $"hoje às {hora}"),
+            1 => ("amanhã", $"amanhã ({dt.ToString("dddd", PtBr)}) às {hora}"),
+            _ => (dt.ToString("dd/MM", PtBr), quando.Longo),
+        };
+    }
+
+    /// <summary>Os valores de <see cref="ModelosAviso.Variaveis"/> para este e-mail.</summary>
+    private static Dictionary<string, string?> Variaveis(
+        string evento, DadosNotificacao d, EmpresaRemetente? empresa, string nomeEmpresa, string primeiroNome,
+        Momento quando, Momento? antes, IReadOnlyList<ItemNotificacao> itens, string? profissional)
+    {
+        var (dia, relativo) = Relativo(d, quando);
+        var nomes = itens.Select(i => i.Nome).Where(n => !string.IsNullOrWhiteSpace(n)).ToList();
+        return new Dictionary<string, string?>
+        {
+            ["cliente"] = primeiroNome,
+            ["servico"] = nomes.Count <= 1 ? nomes.FirstOrDefault() : $"{string.Join(", ", nomes.Take(nomes.Count - 1))} e {nomes[^1]}",
+            ["profissional"] = profissional,
+            ["data"] = quando.Data?.ToString("dd/MM", PtBr) ?? quando.Curto,
+            ["hora"] = quando.Data?.ToString("HH:mm", PtBr) ?? "",
+            ["dia"] = dia,
+            ["quando"] = evento == EventosNotificacao.AgendamentoLembrete ? relativo : quando.Longo,
+            ["quando_anterior"] = antes?.Longo,
+            ["empresa"] = nomeEmpresa,
+            ["endereco"] = empresa?.Endereco,
+            ["telefone"] = empresa?.Telefone,
+        };
     }
 
     private static string Contato(EmpresaRemetente? e) => (e?.Email, e?.Telefone) switch
@@ -208,7 +275,10 @@ public static partial class ModelosEmail
     private sealed record Pagina(
         EstiloEvento Estilo, bool Cancelado, bool ComConvite, string NomeEmpresa, EmpresaRemetente? Empresa, string Titulo,
         string Saudacao, string Abertura, Momento Quando, Momento? Antes, List<ItemNotificacao> Itens, decimal Total,
-        string? Profissional, string? Motivo, string? Botao, Links Links, string Fecho, string Rodape);
+        string? Profissional, string? Motivo, string? Recado, string? Botao, Links Links, string Fecho, string Rodape);
+
+    /// <summary>Escapado, com as quebras de linha que a empresa digitou.</summary>
+    private static string Paragrafo(string s) => E(s).Replace("\n", "<br>");
 
     private static string E(string s) => s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;")
         .Replace("\"", "&quot;").Replace("'", "&#39;");
@@ -302,6 +372,14 @@ public static partial class ModelosEmail
                 """;
         }
 
+        var recado = p.Recado is null ? "" : $"""
+            <tr><td style="padding:16px 32px 4px">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fbf3ec;border:1px solid #f0dcc8;border-radius:12px">
+            <tr><td style="padding:14px 16px;font-size:14px;line-height:1.55;color:#3d332c">{Paragrafo(p.Recado)}</td></tr>
+            </table>
+            </td></tr>
+            """;
+
         var acao = p.Botao is null ? "" : $"""
             <tr><td align="center" style="padding:16px 32px 4px">
             <a href="{E(p.Botao)}" style="display:inline-block;background:{Marca};color:#ffffff;text-decoration:none;font-size:16px;font-weight:600;padding:14px 36px;border-radius:10px">Confirmar presença</a>
@@ -329,7 +407,7 @@ public static partial class ModelosEmail
             <html lang="pt-BR">
             <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>{E(p.Titulo)}</title></head>
             <body style="margin:0;padding:0;background:#f5f0eb;{Fonte}">
-            <div style="display:none;max-height:0;overflow:hidden;opacity:0">{E(p.Abertura)}</div>
+            <div style="display:none;max-height:0;overflow:hidden;opacity:0">{E(p.Abertura.ReplaceLineEndings(" "))}</div>
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f0eb">
             <tr><td align="center" style="padding:32px 12px">
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px">
@@ -345,7 +423,7 @@ public static partial class ModelosEmail
             </td></tr>
             <tr><td style="padding:20px 32px 0;font-size:15px;line-height:1.6;color:#3d332c">
             <p style="margin:0 0 6px">{E(p.Saudacao)}</p>
-            <p style="margin:0">{E(p.Abertura)}</p>
+            <p style="margin:0">{Paragrafo(p.Abertura)}</p>
             </td></tr>
             <tr><td style="padding:24px 32px 8px">
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fbf8f5;border:1px solid {Linha};border-radius:14px">
@@ -361,6 +439,7 @@ public static partial class ModelosEmail
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0">{detalhes}</table>
             </td></tr>
             {servicos}
+            {recado}
             {acao}
             {linhaAtalhos}
             {convite}
@@ -372,6 +451,7 @@ public static partial class ModelosEmail
             {contato}
             {enderecoRodape}
             <div style="margin-top:12px;color:#a59a91">{E(p.Rodape)}</div>
+            <div style="margin-top:6px"><a href="{MarcadorDescadastro}" style="color:#a59a91;text-decoration:underline">Não quero mais receber estes e-mails</a></div>
             </td></tr>
             </table>
             </td></tr>

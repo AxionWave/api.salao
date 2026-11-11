@@ -15,6 +15,8 @@ public sealed class EmpresaConfig
     public int[] LembretesHoras { get; set; } = [24];
     /// <summary>Cada profissional recebe a agenda do dia por e-mail de manhã.</summary>
     public bool ResumoDiario { get; set; }
+    /// <summary>JSON de <see cref="Lyra.Application.Configuracao.AvisosEmpresa"/>: canais por evento e textos. Nulo = tudo padrão.</summary>
+    public string? Avisos { get; set; }
     public DateTime DataCriacao { get; set; } = DateTime.UtcNow;
     public DateTime? DataAtualizacao { get; set; }
 }

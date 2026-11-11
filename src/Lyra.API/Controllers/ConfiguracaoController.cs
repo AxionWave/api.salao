@@ -10,7 +10,10 @@ namespace Lyra.API.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/salao/configuracao")]
-public sealed class ConfiguracaoController(IConfiguracaoEmpresaService configuracao, ICurrentUserAccessor currentUser) : ControllerBase
+public sealed class ConfiguracaoController(
+    IConfiguracaoEmpresaService configuracao,
+    IAvisosService avisos,
+    ICurrentUserAccessor currentUser) : ControllerBase
 {
     /// <summary>Segmento, fuso e terminologia da empresa. Todo usuário do Lyra precisa para montar a tela.</summary>
     [HttpGet]
@@ -34,6 +37,46 @@ public sealed class ConfiguracaoController(IConfiguracaoEmpresaService configura
         try
         {
             return Ok(await configuracao.SalvarAsync(empresaId, request, ct));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = "validation_error", message = ex.Message });
+        }
+    }
+
+    /// <summary>Avisos por evento e canal, textos dos e-mails e os modelos e variáveis para montar a tela.</summary>
+    [HttpGet("avisos")]
+    [RequireModulo(ModuleCodes.Configuracoes)]
+    public async Task<ActionResult<AvisosResponse>> ObterAvisos(CancellationToken ct)
+    {
+        if (!TryEmpresa(out var empresaId, out var erro)) return erro;
+        return Ok(await avisos.ObterAsync(empresaId, ct));
+    }
+
+    [HttpPut("avisos")]
+    [RequireModulo(ModuleCodes.Configuracoes)]
+    public async Task<ActionResult<AvisosResponse>> SalvarAvisos([FromBody] AvisosDto request, CancellationToken ct)
+    {
+        if (!TryEmpresa(out var empresaId, out var erro)) return erro;
+        try
+        {
+            return Ok(await avisos.SalvarAsync(empresaId, request, ct));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = "validation_error", message = ex.Message });
+        }
+    }
+
+    /// <summary>O e-mail como sairia com estes textos, com um horário de exemplo e os dados da empresa.</summary>
+    [HttpPost("avisos/previa")]
+    [RequireModulo(ModuleCodes.Configuracoes)]
+    public async Task<ActionResult<PreviaAvisoResponse>> PreviaAviso([FromBody] PreviaAvisoRequest request, CancellationToken ct)
+    {
+        if (!TryEmpresa(out var empresaId, out var erro)) return erro;
+        try
+        {
+            return Ok(await avisos.PreviaAsync(empresaId, request, ct));
         }
         catch (ArgumentException ex)
         {

@@ -74,7 +74,7 @@ public sealed class ConfiguracaoEmpresaService(LyraDbContext db) : IConfiguracao
             e?.ResumoDiario ?? false);
     }
 
-    private static int[] Lembretes(IReadOnlyList<int> horas)
+    internal static int[] Lembretes(IReadOnlyList<int> horas)
     {
         var distintas = horas.Distinct().OrderByDescending(h => h).ToArray();
         if (distintas.Length > 3) throw new ArgumentException("Lembretes: no máximo 3.");

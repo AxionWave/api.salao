@@ -31,7 +31,7 @@ public sealed class CanalPush(
     public bool ParaEquipe => true;
 
     public bool Aceita(string evento, string? origem, EmpresaConfig? config) =>
-        evento != EventosNotificacao.AgendamentoLembrete;
+        evento != EventosNotificacao.AgendamentoLembrete && AvisosEmpresa.Ler(config?.Avisos).Equipe(evento);
 
     public string? Destino(Cliente cliente) => null;
 

@@ -34,6 +34,7 @@ public static class DependencyInjection
         services.AddScoped<ProcessadorNotificacoes>();
         services.AddScoped<ProgramadorAvisos>();
         services.AddScoped<LeitorEmpresa>();
+        services.AddScoped<Lyra.Application.Configuracao.IAvisosService, AvisosService>();
         services.AddSingleton<LinksPublicos>();
         services.AddScoped<IAgendamentoPublicoService, AgendamentoPublicoService>();
 
