@@ -18,7 +18,7 @@ public sealed class NotificacaoService(LyraDbContext db) : INotificacaoService
         }
 
         return await db.Notificacoes.AsNoTracking()
-            .Where(n => n.EmpresaId == empresaId && n.ClienteId == clienteId)
+            .Where(n => n.EmpresaId == empresaId && n.ClienteId == clienteId && n.Canal != CanalPainel.NomeCanal)
             .OrderByDescending(n => n.DataCriacao)
             .ThenByDescending(n => n.Id)
             .Take(LimiteHistorico)

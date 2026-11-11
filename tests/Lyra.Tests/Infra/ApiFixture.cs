@@ -1,5 +1,7 @@
 using Lyra.Infrastructure.Notificacoes;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http.Connections;
+using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
@@ -49,6 +51,7 @@ public sealed class ApiFixture : IAsyncLifetime
         Environment.SetEnvironmentVariable("Notificacoes__Worker", "false");
         Environment.SetEnvironmentVariable("Notificacoes__Canais__0", CanalTeste.NomeCanal);
         Environment.SetEnvironmentVariable("Notificacoes__Canais__1", CanalEmail.NomeCanal);
+        Environment.SetEnvironmentVariable("Notificacoes__Canais__2", CanalPainel.NomeCanal);
         Environment.SetEnvironmentVariable("GATEWAY_INTERNAL_TOKEN", TokenInterno);
         Environment.SetEnvironmentVariable("Email__UrlMensageria", "http://mensageria.falsa");
         Environment.SetEnvironmentVariable("Email__UrlPublica", UrlPublica);
@@ -98,6 +101,30 @@ public sealed class ApiFixture : IAsyncLifetime
 
     public IServiceProvider Servicos => factory?.Services
         ?? throw new InvalidOperationException("A API de testes não subiu.");
+
+    /// <summary>
+    /// Conexão com o hub do painel por WebSocket, com o token na URL como o navegador faz
+    /// (o cabeçalho Authorization não existe no WebSocket do navegador).
+    /// </summary>
+    public async Task<HubConnection> ConectarPainel(string token)
+    {
+        var servidor = factory?.Server ?? throw new InvalidOperationException("A API de testes não subiu.");
+        var conexao = new HubConnectionBuilder()
+            .WithUrl(new Uri(servidor.BaseAddress, "/api/salao/hub/painel"), o =>
+            {
+                o.Transports = HttpTransportType.WebSockets;
+                o.SkipNegotiation = true;
+                o.WebSocketFactory = async (contexto, ct) =>
+                {
+                    var separador = string.IsNullOrEmpty(contexto.Uri.Query) ? "?" : "&";
+                    var uri = new Uri($"{contexto.Uri}{separador}access_token={Uri.EscapeDataString(token)}");
+                    return await servidor.CreateWebSocketClient().ConnectAsync(uri, ct);
+                };
+            })
+            .Build();
+        await conexao.StartAsync();
+        return conexao;
+    }
 
     public async Task DisposeAsync()
     {

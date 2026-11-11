@@ -1,13 +1,14 @@
 using Lyra.Application.Abstractions;
 using Lyra.Application.Agendamentos;
 using Lyra.Application.Bloqueios;
+using Lyra.Infrastructure.AoVivo;
 using Lyra.Infrastructure.Persistence;
 using Lyra.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace Lyra.Infrastructure.Services;
 
-public sealed class BloqueioService(LyraDbContext db) : IBloqueioService
+public sealed class BloqueioService(LyraDbContext db, AvisosAoVivo aoVivo) : IBloqueioService
 {
     private static readonly TimeSpan DuracaoMaxima = TimeSpan.FromDays(366);
 
@@ -79,6 +80,7 @@ public sealed class BloqueioService(LyraDbContext db) : IBloqueioService
         };
         db.Bloqueios.Add(entidade);
         await db.SaveChangesAsync(ct);
+        await aoVivo.AgendaAlteradaAsync(empresaId, profissional?.Id);
 
         var profissionalId = profissional?.Id;
         var afetados = await db.Agendamentos.AsNoTracking()
@@ -101,6 +103,7 @@ public sealed class BloqueioService(LyraDbContext db) : IBloqueioService
             ?? throw new KeyNotFoundException("Bloqueio não encontrado.");
         db.Bloqueios.Remove(entidade);
         await db.SaveChangesAsync(ct);
+        await aoVivo.AgendaAlteradaAsync(empresaId, entidade.ProfissionalId);
     }
 
     private static BloqueioDto Map(Bloqueio b) => new(

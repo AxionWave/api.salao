@@ -18,6 +18,8 @@ services:
       - GATEWAY_INTERNAL_TOKEN=${GATEWAY_INTERNAL_TOKEN}
       - Email__UrlMensageria=${MENSAGERIA_URL:-http://mensageria:8080}
       - Notificacoes__Canais__0=email
+      # Sino do painel: avisos da agenda para a equipe, ao vivo pelo hub /api/salao/hub/painel.
+      - Notificacoes__Canais__1=painel
       - ConnectionStrings__Default=Host=postgres;Port=5432;Database=${POSTGRES_DB:-base};Username=${DB_USERNAME:-postgres};Password=${DB_PASSWORD};Search Path=lyra
     restart: on-failure:5
     healthcheck:

@@ -52,11 +52,11 @@ public static class Tokens
     public static readonly string[] Todos = ModuleCodes.Todos;
     public static readonly string[] Recepcao = [ModuleCodes.Raiz, ModuleCodes.Agenda];
 
-    public static string Gerar(int? empresaId, IEnumerable<string> modulos, string? segredo = null)
+    public static string Gerar(int? empresaId, IEnumerable<string> modulos, string? segredo = null, int usuarioId = 1)
     {
         var claims = new List<Claim>
         {
-            new("userId", "1"),
+            new("userId", usuarioId.ToString()),
             new("username", "testes"),
             new("email", "testes@lyra.local"),
             new("roles", "USER"),

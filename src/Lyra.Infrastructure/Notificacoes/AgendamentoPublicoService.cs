@@ -1,6 +1,7 @@
 using Lyra.Application.Abstractions;
 using Lyra.Application.Agendamentos;
 using Lyra.Application.Notificacoes;
+using Lyra.Infrastructure.AoVivo;
 using Lyra.Infrastructure.Persistence;
 using Lyra.Infrastructure.Persistence.Entities;
 using Lyra.Infrastructure.Services;
@@ -12,7 +13,8 @@ public sealed class AgendamentoPublicoService(
     LyraDbContext db,
     LinksPublicos links,
     LeitorEmpresa empresas,
-    FilaNotificacoes fila) : IAgendamentoPublicoService
+    FilaNotificacoes fila,
+    AvisosAoVivo aoVivo) : IAgendamentoPublicoService
 {
     public async Task<AgendamentoPublicoDto> ObterAsync(string token, CancellationToken ct)
     {
@@ -36,6 +38,7 @@ public sealed class AgendamentoPublicoService(
             await fila.EnfileirarAsync(agendamento, EventosNotificacao.AgendamentoConfirmado, ct,
                 origem: FilaNotificacoes.OrigemCliente);
             await db.SaveChangesAsync(ct);
+            await aoVivo.AgendaAlteradaAsync(agendamento.EmpresaId, agendamento.ProfissionalId);
         }
         return await MapAsync(agendamento, ct);
     }

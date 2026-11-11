@@ -1,4 +1,5 @@
 using Lyra.Application.Abstractions;
+using Lyra.Infrastructure.AoVivo;
 using Lyra.Infrastructure.Auth;
 using Lyra.Infrastructure.Notificacoes;
 using Lyra.Infrastructure.Persistence;
@@ -25,6 +26,10 @@ public static class DependencyInjection
 
         services.Configure<NotificacoesOptions>(configuration.GetSection(NotificacoesOptions.Secao));
         services.AddScoped<FilaNotificacoes>();
+        services.AddSingleton<SinalNotificacoes>();
+        services.AddSingleton<AvisosAoVivo>();
+        services.AddScoped<ICanalNotificacao, CanalPainel>();
+        services.AddScoped<IPainelService, PainelService>();
         services.AddScoped<ProcessadorNotificacoes>();
         services.AddScoped<LeitorEmpresa>();
         services.AddSingleton<LinksPublicos>();

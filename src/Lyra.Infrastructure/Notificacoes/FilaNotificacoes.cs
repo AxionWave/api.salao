@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using Lyra.Application.Abstractions;
 using Lyra.Application.Notificacoes;
 using Lyra.Infrastructure.Persistence;
 using Lyra.Infrastructure.Persistence.Entities;
@@ -16,7 +17,8 @@ namespace Lyra.Infrastructure.Notificacoes;
 public sealed class FilaNotificacoes(
     LyraDbContext db,
     IEnumerable<ICanalNotificacao> canais,
-    IOptions<NotificacoesOptions> opcoes)
+    IOptions<NotificacoesOptions> opcoes,
+    ICurrentUserAccessor usuario)
 {
     public const string OrigemCliente = "cliente";
 
@@ -74,14 +76,15 @@ public sealed class FilaNotificacoes(
             Fuso = fuso.Id,
             Motivo = motivo,
             Origem = origem,
+            AutorId = origem == OrigemCliente ? null : usuario.User.UserId,
             Cadeia = await CadeiaAsync(agendamento, ct),
         }, Json);
 
         var agora = DateTime.UtcNow;
         foreach (var canal in ativos)
         {
-            var destino = canal.Destino(cliente);
-            if (destino is null) continue;
+            var destino = canal.ParaEquipe ? null : canal.Destino(cliente);
+            if (destino is null && !canal.ParaEquipe) continue;
             db.Notificacoes.Add(new Notificacao
             {
                 EmpresaId = agendamento.EmpresaId,
@@ -138,6 +141,8 @@ public sealed class DadosNotificacao
     public string Fuso { get; init; } = "";
     public string? Motivo { get; init; }
     public string? Origem { get; init; }
+    /// <summary>Usuário da equipe que fez a mudança (null quando foi o cliente): o painel não avisa a pessoa do que ela mesma fez.</summary>
+    public int? AutorId { get; init; }
     /// <summary>Id do primeiro agendamento da cadeia de remarcações (0 quando ainda não salvo).</summary>
     public int Cadeia { get; init; }
 }

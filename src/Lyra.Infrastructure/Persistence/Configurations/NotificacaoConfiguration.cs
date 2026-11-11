@@ -31,6 +31,9 @@ public sealed class NotificacaoConfiguration : IEntityTypeConfiguration<Notifica
             .HasFilter("status = 'pendente'");
         builder.HasIndex(x => new { x.EmpresaId, x.ClienteId, x.DataCriacao })
             .HasDatabaseName("ix_notificacoes_empresa_cliente");
+        builder.HasIndex(x => new { x.EmpresaId, x.DataCriacao })
+            .HasDatabaseName("ix_notificacoes_painel")
+            .HasFilter("canal = 'painel'");
 
         builder.HasOne(x => x.Agendamento)
             .WithMany()

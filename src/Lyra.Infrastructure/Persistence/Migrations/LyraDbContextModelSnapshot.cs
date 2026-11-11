@@ -463,10 +463,33 @@ namespace Lyra.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_notificacoes_pendentes")
                         .HasFilter("status = 'pendente'");
 
+                    b.HasIndex("EmpresaId", "DataCriacao")
+                        .HasDatabaseName("ix_notificacoes_painel")
+                        .HasFilter("canal = 'painel'");
+
                     b.HasIndex("EmpresaId", "ClienteId", "DataCriacao")
                         .HasDatabaseName("ix_notificacoes_empresa_cliente");
 
                     b.ToTable("notificacoes", "lyra");
+                });
+
+            modelBuilder.Entity("Lyra.Infrastructure.Persistence.Entities.PainelLeitura", b =>
+                {
+                    b.Property<int>("EmpresaId")
+                        .HasColumnType("integer")
+                        .HasColumnName("empresa_id");
+
+                    b.Property<int>("UsuarioId")
+                        .HasColumnType("integer")
+                        .HasColumnName("usuario_id");
+
+                    b.Property<DateTime>("VistoAte")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("visto_ate");
+
+                    b.HasKey("EmpresaId", "UsuarioId");
+
+                    b.ToTable("painel_leituras", "lyra");
                 });
 
             modelBuilder.Entity("Lyra.Infrastructure.Persistence.Entities.Profissional", b =>

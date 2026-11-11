@@ -1,6 +1,7 @@
 using Lyra.Application.Abstractions;
 using Lyra.Application.Agendamentos;
 using Lyra.Application.Notificacoes;
+using Lyra.Infrastructure.AoVivo;
 using Lyra.Infrastructure.Notificacoes;
 using Lyra.Infrastructure.Persistence;
 using Lyra.Infrastructure.Persistence.Entities;
@@ -9,7 +10,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 
 namespace Lyra.Infrastructure.Services;
 
-public sealed class AgendamentoService(LyraDbContext db, FilaNotificacoes fila) : IAgendamentoService
+public sealed class AgendamentoService(LyraDbContext db, FilaNotificacoes fila, AvisosAoVivo aoVivo) : IAgendamentoService
 {
     private const int MaxIntervaloApos = ServicoService.MaxIntervaloAposMinutos;
     public const int MaxDiasListagem = 62;
@@ -108,6 +109,7 @@ public sealed class AgendamentoService(LyraDbContext db, FilaNotificacoes fila) 
         await fila.EnfileirarAsync(entidade, EventosNotificacao.AgendamentoCriado, ct);
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
+        await aoVivo.AgendaAlteradaAsync(empresaId, entidade.ProfissionalId);
         return (await ObterAsync(empresaId, entidade.Id, ct))!;
     }
 
@@ -139,6 +141,7 @@ public sealed class AgendamentoService(LyraDbContext db, FilaNotificacoes fila) 
         await fila.EnfileirarAsync(novo, EventosNotificacao.AgendamentoRemarcado, ct, inicioAnterior: original.Inicio);
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
+        await aoVivo.AgendaAlteradaAsync(empresaId);
         return (await ObterAsync(empresaId, novo.Id, ct))!;
     }
 
@@ -235,6 +238,7 @@ public sealed class AgendamentoService(LyraDbContext db, FilaNotificacoes fila) 
         {
             await tx.CommitAsync(ct);
         }
+        await aoVivo.AgendaAlteradaAsync(empresaId);
         return (await ObterAsync(empresaId, id, ct))!;
     }
 
@@ -284,6 +288,10 @@ public sealed class AgendamentoService(LyraDbContext db, FilaNotificacoes fila) 
             await fila.EnfileirarAsync(entidade, EventosNotificacao.AgendamentoConfirmado, ct);
         }
         await db.SaveChangesAsync(ct);
+        if (mudou)
+        {
+            await aoVivo.AgendaAlteradaAsync(empresaId, entidade.ProfissionalId);
+        }
         return (await ObterAsync(empresaId, id, ct))!;
     }
 

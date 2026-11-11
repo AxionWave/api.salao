@@ -11,6 +11,9 @@ public interface ICanalNotificacao
     /// <summary>Se este evento vira mensagem neste canal para a empresa (ex.: a empresa ligou o envio).</summary>
     bool Aceita(string evento, string? origem, EmpresaConfig? config) => true;
 
+    /// <summary>Canal da equipe (painel): a notificação não tem destino e não depende do contato do cliente.</summary>
+    bool ParaEquipe => false;
+
     /// <summary>Para onde mandar a este cliente; null quando ele não tem como receber neste canal.</summary>
     string? Destino(Cliente cliente);
 

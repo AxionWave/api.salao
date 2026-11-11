@@ -8,6 +8,7 @@ namespace Lyra.Infrastructure.Notificacoes;
 public sealed class WorkerNotificacoes(
     IServiceScopeFactory scopes,
     IOptions<NotificacoesOptions> opcoes,
+    SinalNotificacoes sinal,
     ILogger<WorkerNotificacoes> logger) : BackgroundService
 {
     private const int LotePorRodada = 50;
@@ -16,8 +17,7 @@ public sealed class WorkerNotificacoes(
     {
         if (opcoes.Value.Canais.Length == 0) return;
         var intervalo = TimeSpan.FromSeconds(Math.Max(1, opcoes.Value.IntervaloSegundos));
-        using var timer = new PeriodicTimer(intervalo);
-        do
+        while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
@@ -33,6 +33,8 @@ public sealed class WorkerNotificacoes(
             {
                 logger.LogError(ex, "Falha ao processar a fila de notificações");
             }
-        } while (await timer.WaitForNextTickAsync(stoppingToken));
+            // Um commit com notificações acorda antes do intervalo (o painel aparece na hora).
+            await sinal.EsperarAsync(intervalo, stoppingToken);
+        }
     }
 }

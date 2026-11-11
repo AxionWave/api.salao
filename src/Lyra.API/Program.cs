@@ -1,6 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Text;
 using Lyra.Infrastructure;
+using Lyra.Infrastructure.AoVivo;
 using Lyra.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -99,6 +100,19 @@ builder.Services
             NameClaimType = "username",
             RoleClaimType = "roles"
         };
+        // WebSocket e SSE do navegador não mandam cabeçalho: o cliente SignalR põe o token na URL.
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = ctx =>
+            {
+                var token = ctx.Request.Query["access_token"];
+                if (!string.IsNullOrEmpty(token) && ctx.HttpContext.Request.Path.StartsWithSegments("/api/salao/hub"))
+                {
+                    ctx.Token = token;
+                }
+                return Task.CompletedTask;
+            }
+        };
         if (builder.Environment.IsDevelopment())
         {
             // Token vem do oAuth da VPS; a chave local não é a de produção.
@@ -111,6 +125,8 @@ builder.Services
     });
 
 builder.Services.AddAuthorization();
+builder.Services.AddSignalR(o => o.EnableDetailedErrors = builder.Environment.IsDevelopment())
+    .AddJsonProtocol(o => o.PayloadSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase);
 
 builder.Services.AddCors(o =>
 {
@@ -142,9 +158,19 @@ if (app.Environment.IsDevelopment())
     app.UseCors("dev");
 }
 
+// Sem buffer no Nginx: com SSE (quando o WebSocket não passa) as mensagens chegam na hora.
+app.Use(async (ctx, next) =>
+{
+    if (ctx.Request.Path.StartsWithSegments("/api/salao/hub"))
+    {
+        ctx.Response.Headers["X-Accel-Buffering"] = "no";
+    }
+    await next();
+});
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapHub<PainelHub>(PainelHub.Rota);
 
 app.Run();
 
