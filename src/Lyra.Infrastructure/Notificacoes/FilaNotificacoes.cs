@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using Lyra.Application.Abstractions;
+using Lyra.Application.Agendamentos;
 using Lyra.Application.Notificacoes;
 using Lyra.Infrastructure.Persistence;
 using Lyra.Infrastructure.Persistence.Entities;
@@ -21,6 +22,8 @@ public sealed class FilaNotificacoes(
     ICurrentUserAccessor usuario)
 {
     public const string OrigemCliente = "cliente";
+    /// <summary>Avisos programados (lembretes): ninguém da equipe fez nada.</summary>
+    public const string OrigemSistema = "sistema";
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private static readonly CultureInfo PtBr = CultureInfo.GetCultureInfo("pt-BR");
@@ -31,7 +34,8 @@ public sealed class FilaNotificacoes(
         CancellationToken ct,
         DateTime? inicioAnterior = null,
         string? motivo = null,
-        string? origem = null)
+        string? origem = null,
+        DateTime? referencia = null)
     {
         var ligados = canais
             .Where(c => opcoes.Value.Canais.Contains(c.Nome, StringComparer.OrdinalIgnoreCase))
@@ -76,8 +80,10 @@ public sealed class FilaNotificacoes(
             Fuso = fuso.Id,
             Motivo = motivo,
             Origem = origem,
-            AutorId = origem == OrigemCliente ? null : usuario.User.UserId,
+            AutorId = origem is OrigemCliente or OrigemSistema ? null : usuario.User.UserId,
             Cadeia = await CadeiaAsync(agendamento, ct),
+            Confirmado = agendamento.Status == StatusAgendamento.Confirmado,
+            Referencia = referencia,
         }, Json);
 
         var agora = DateTime.UtcNow;
@@ -145,6 +151,10 @@ public sealed class DadosNotificacao
     public int? AutorId { get; init; }
     /// <summary>Id do primeiro agendamento da cadeia de remarcações (0 quando ainda não salvo).</summary>
     public int Cadeia { get; init; }
+    /// <summary>O agendamento já estava confirmado: o lembrete não pede confirmação.</summary>
+    public bool Confirmado { get; init; }
+    /// <summary>Instante em que o lembrete foi programado: é a partir dele que o texto diz "hoje" ou "amanhã".</summary>
+    public DateTime? Referencia { get; init; }
 }
 
 public sealed class ItemNotificacao

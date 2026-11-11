@@ -1,13 +1,15 @@
 using System.Globalization;
 using System.Text;
+using Lyra.Application.Configuracao;
 using Lyra.Application.Notificacoes;
+using Lyra.Infrastructure.Services;
 
 namespace Lyra.Infrastructure.Notificacoes;
 
 public sealed record EmailMontado(string Assunto, string Html, string Texto, string? Ics);
 
 /// <summary>Textos dos e-mails ao cliente. Usa "horário" em vez da terminologia da empresa, que vale para a equipe.</summary>
-public static class ModelosEmail
+public static partial class ModelosEmail
 {
     private static readonly CultureInfo PtBr = CultureInfo.GetCultureInfo("pt-BR");
 
@@ -40,6 +42,7 @@ public static class ModelosEmail
                 "Presença confirmada",
                 $"Está confirmado: esperamos você em {nomeEmpresa} {quando.Longo}.",
                 null),
+            EventosNotificacao.AgendamentoLembrete => Lembrete(d, nomeEmpresa, quando, linkConfirmar),
             _ => (
                 $"Horário marcado: {quando.Curto} – {nomeEmpresa}",
                 "Seu horário está marcado",
@@ -87,12 +90,39 @@ public static class ModelosEmail
         if (links.WhatsApp is not null) texto.AppendLine($"WhatsApp: {links.WhatsApp}");
         texto.AppendLine().AppendLine(fecho).AppendLine().AppendLine(rodape);
 
-        var html = Html(new Pagina(
-            Estilo(evento), cancelado, nomeEmpresa, empresa, titulo, $"Olá, {primeiroNome}!", abertura,
-            quando, antes, itens, total, profissional, motivo, botao, links, fecho, rodape));
         var uid = d.Cadeia > 0 ? d.Cadeia : agendamentoId;
-        var ics = Ics(evento, uid, d, resumo, profissional, empresa?.Endereco);
+        // O lembrete não manda convite: o evento já foi para o calendário quando o horário foi marcado.
+        var ics = evento == EventosNotificacao.AgendamentoLembrete ? null : Ics(evento, uid, d, resumo, profissional, empresa?.Endereco);
+        var html = Html(new Pagina(
+            Estilo(evento), cancelado, ics is not null && !cancelado, nomeEmpresa, empresa, titulo, $"Olá, {primeiroNome}!", abertura,
+            quando, antes, itens, total, profissional, motivo, botao, links, fecho, rodape));
         return new EmailMontado(assunto, html, texto.ToString(), ics);
+    }
+
+    private static (string Assunto, string Titulo, string Abertura, string? Botao) Lembrete(
+        DadosNotificacao d, string nomeEmpresa, Momento quando, string? linkConfirmar)
+    {
+        var botao = d.Confirmado ? null : linkConfirmar;
+        if (quando.Data is not { } dt) return (
+            $"Lembrete: {quando.Curto} – {nomeEmpresa}",
+            "Lembrete do seu horário",
+            $"Passando para lembrar do seu horário em {nomeEmpresa}: {quando.Longo}.",
+            botao);
+
+        var fuso = FusoHorarioEmpresa.Resolver(string.IsNullOrEmpty(d.Fuso) ? Segmentos.FusoPadrao : d.Fuso);
+        var hoje = TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(d.Referencia ?? DateTime.UtcNow, DateTimeKind.Utc), fuso).Date;
+        var hora = dt.ToString("HH:mm", PtBr);
+        var (dia, titulo, quandoTexto) = (dt.Date - hoje).Days switch
+        {
+            0 => ("hoje", "Seu horário é hoje", $"hoje às {hora}"),
+            1 => ("amanhã", "Seu horário é amanhã", $"amanhã ({dt.ToString("dddd", PtBr)}) às {hora}"),
+            _ => (dt.ToString("dd/MM", PtBr), "Lembrete do seu horário", quando.Longo),
+        };
+        return (
+            $"Lembrete: {dia} às {hora} – {nomeEmpresa}",
+            titulo,
+            $"Passando para lembrar: seu horário em {nomeEmpresa} é {quandoTexto}.",
+            botao);
     }
 
     private static string Contato(EmpresaRemetente? e) => (e?.Email, e?.Telefone) switch
@@ -171,11 +201,12 @@ public static class ModelosEmail
         EventosNotificacao.AgendamentoRemarcado => new("Horário alterado", "&#8635;", "#1d4ed8", "#eff6ff"),
         EventosNotificacao.AgendamentoCancelado => new("Cancelado", "&#10005;", "#b91c1c", "#fef2f2"),
         EventosNotificacao.AgendamentoConfirmado => new("Confirmado", "&#10003;", "#15803d", "#f0fdf4"),
+        EventosNotificacao.AgendamentoLembrete => new("Lembrete", "&#9200;", "#b45309", "#fffbeb"),
         _ => new("Agendado", "&#10003;", "#9a5b27", "#fbf3ec"),
     };
 
     private sealed record Pagina(
-        EstiloEvento Estilo, bool Cancelado, string NomeEmpresa, EmpresaRemetente? Empresa, string Titulo,
+        EstiloEvento Estilo, bool Cancelado, bool ComConvite, string NomeEmpresa, EmpresaRemetente? Empresa, string Titulo,
         string Saudacao, string Abertura, Momento Quando, Momento? Antes, List<ItemNotificacao> Itens, decimal Total,
         string? Profissional, string? Motivo, string? Botao, Links Links, string Fecho, string Rodape);
 
@@ -200,18 +231,19 @@ public static class ModelosEmail
     private static string BotaoSecundario(string href, string icone, string texto, string cor = Tinta) =>
         $"""<a href="{E(href)}" style="display:inline-block;margin:4px;padding:10px 16px;border:1px solid #e2d8ce;border-radius:999px;background:#ffffff;color:{cor};font-size:13px;font-weight:600;text-decoration:none;white-space:nowrap">{icone}&nbsp; {texto}</a>""";
 
+    /// <summary>O logo já traz o nome; sem logo, monograma + nome.</summary>
+    private static string Cabecalho(EmpresaRemetente? empresa, string nomeEmpresa) => empresa?.LogoUrl is { } logo
+        ? $"""<img src="{E(logo)}" alt="{E(nomeEmpresa)}" height="64" style="display:block;margin:0 auto;height:64px;max-width:240px;border:0;outline:none;text-decoration:none">"""
+        : $"""
+            <table role="presentation" cellpadding="0" cellspacing="0" align="center"><tr><td width="64" height="64" align="center" valign="middle" style="width:64px;height:64px;border-radius:32px;background:{Marca};color:#ffffff;font-size:24px;font-weight:700;{Fonte}">{E(Iniciais(nomeEmpresa))}</td></tr></table>
+            <div style="margin-top:10px;font-size:16px;font-weight:600;color:#3d332c">{E(nomeEmpresa)}</div>
+            """;
+
     // Layout em tabelas e estilos inline: é o que Gmail, Outlook e Apple Mail renderizam igual.
     private static string Html(Pagina p)
     {
         var s = p.Estilo;
-
-        // O logo já traz o nome; sem logo, monograma + nome.
-        var cabecalho = p.Empresa?.LogoUrl is { } logo
-            ? $"""<img src="{E(logo)}" alt="{E(p.NomeEmpresa)}" height="64" style="display:block;margin:0 auto;height:64px;max-width:240px;border:0;outline:none;text-decoration:none">"""
-            : $"""
-                <table role="presentation" cellpadding="0" cellspacing="0" align="center"><tr><td width="64" height="64" align="center" valign="middle" style="width:64px;height:64px;border-radius:32px;background:{Marca};color:#ffffff;font-size:24px;font-weight:700;{Fonte}">{E(Iniciais(p.NomeEmpresa))}</td></tr></table>
-                <div style="margin-top:10px;font-size:16px;font-weight:600;color:#3d332c">{E(p.NomeEmpresa)}</div>
-                """;
+        var cabecalho = Cabecalho(p.Empresa, p.NomeEmpresa);
 
         // Bloco de data: "18 / NOV" ao lado do dia da semana e do horário.
         var riscado = p.Cancelado ? "text-decoration:line-through;" : "";
@@ -281,7 +313,7 @@ public static class ModelosEmail
         if (p.Links.Mapa is { } urlMapa2 && !p.Cancelado) atalhos.Add(BotaoSecundario(urlMapa2, "&#128205;", "Como chegar"));
         if (p.Links.WhatsApp is { } zap) atalhos.Add(BotaoSecundario(zap, "&#128172;", p.Cancelado ? "Remarcar pelo WhatsApp" : "WhatsApp", "#128c4a"));
         var linhaAtalhos = atalhos.Count == 0 ? "" : $"""<tr><td align="center" style="padding:12px 28px 0">{string.Concat(atalhos)}</td></tr>""";
-        var convite = p.Cancelado ? "" :
+        var convite = !p.ComConvite ? "" :
             $"""<tr><td align="center" style="padding:10px 32px 0;font-size:12px;color:{Suave}">O convite em anexo (.ics) também coloca este horário na agenda do celular.</td></tr>""";
 
         var contatos = new[] { p.Empresa?.Telefone, p.Empresa?.Email }.Where(c => c is not null).Select(c => E(c!)).ToArray();

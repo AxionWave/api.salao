@@ -11,6 +11,10 @@ public sealed class EmpresaConfig
     public string? Terminologia { get; set; }
     /// <summary>Clientes com e-mail recebem os avisos de agendamento. Começa desligado.</summary>
     public bool EnviarEmails { get; set; }
+    /// <summary>Com quantas horas de antecedência o cliente recebe lembrete (vazio = nenhum). Só sai se o canal estiver ligado.</summary>
+    public int[] LembretesHoras { get; set; } = [24];
+    /// <summary>Cada profissional recebe a agenda do dia por e-mail de manhã.</summary>
+    public bool ResumoDiario { get; set; }
     public DateTime DataCriacao { get; set; } = DateTime.UtcNow;
     public DateTime? DataAtualizacao { get; set; }
 }

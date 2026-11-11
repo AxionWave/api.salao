@@ -31,6 +31,7 @@ public static class DependencyInjection
         services.AddScoped<ICanalNotificacao, CanalPainel>();
         services.AddScoped<IPainelService, PainelService>();
         services.AddScoped<ProcessadorNotificacoes>();
+        services.AddScoped<ProgramadorAvisos>();
         services.AddScoped<LeitorEmpresa>();
         services.AddSingleton<LinksPublicos>();
         services.AddScoped<IAgendamentoPublicoService, AgendamentoPublicoService>();
@@ -47,6 +48,7 @@ public static class DependencyInjection
         if (configuration.GetValue(NotificacoesOptions.Secao + ":Worker", true))
         {
             services.AddHostedService<WorkerNotificacoes>();
+            services.AddHostedService<AgendadorAvisos>();
         }
 
         var conn = configuration.GetConnectionString("Default");

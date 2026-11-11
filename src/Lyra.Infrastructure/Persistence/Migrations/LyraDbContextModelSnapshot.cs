@@ -150,6 +150,29 @@ namespace Lyra.Infrastructure.Persistence.Migrations
                     b.ToTable("agendamento_itens", "lyra");
                 });
 
+            modelBuilder.Entity("Lyra.Infrastructure.Persistence.Entities.AvisoProgramado", b =>
+                {
+                    b.Property<string>("Chave")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("chave");
+
+                    b.Property<DateTime>("DataCriacao")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("data_criacao");
+
+                    b.Property<int>("EmpresaId")
+                        .HasColumnType("integer")
+                        .HasColumnName("empresa_id");
+
+                    b.HasKey("Chave");
+
+                    b.HasIndex("DataCriacao")
+                        .HasDatabaseName("ix_avisos_programados_data");
+
+                    b.ToTable("avisos_programados", "lyra");
+                });
+
             modelBuilder.Entity("Lyra.Infrastructure.Persistence.Entities.Bloqueio", b =>
                 {
                     b.Property<int>("Id")
@@ -329,6 +352,19 @@ namespace Lyra.Infrastructure.Persistence.Migrations
                         .HasMaxLength(60)
                         .HasColumnType("character varying(60)")
                         .HasColumnName("fuso_horario");
+
+                    b.Property<int[]>("LembretesHoras")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer[]")
+                        .HasColumnName("lembretes_horas")
+                        .HasDefaultValueSql("'{24}'::integer[]");
+
+                    b.Property<bool>("ResumoDiario")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("resumo_diario");
 
                     b.Property<string>("Segmento")
                         .IsRequired()

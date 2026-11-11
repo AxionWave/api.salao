@@ -1,3 +1,4 @@
+using Lyra.Application.Notificacoes;
 using Lyra.Application.Painel;
 using Lyra.Infrastructure.AoVivo;
 using Lyra.Infrastructure.Persistence.Entities;
@@ -15,6 +16,10 @@ public sealed class CanalPainel(AvisosAoVivo aoVivo) : ICanalNotificacao
     public string Nome => NomeCanal;
 
     public bool ParaEquipe => true;
+
+    /// <summary>O sino conta o que mudou na agenda; lembrete é para o cliente.</summary>
+    public bool Aceita(string evento, string? origem, EmpresaConfig? config) =>
+        evento != EventosNotificacao.AgendamentoLembrete;
 
     public string? Destino(Cliente cliente) => null;
 

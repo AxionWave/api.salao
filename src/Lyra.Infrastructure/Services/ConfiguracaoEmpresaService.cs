@@ -52,6 +52,8 @@ public sealed class ConfiguracaoEmpresaService(LyraDbContext db) : IConfiguracao
         entidade.FusoHorario = fuso;
         entidade.Terminologia = terminologia;
         if (request.EnviarEmails is bool enviar) entidade.EnviarEmails = enviar;
+        if (request.LembretesHoras is { } lembretes) entidade.LembretesHoras = Lembretes(lembretes);
+        if (request.ResumoDiario is bool resumo) entidade.ResumoDiario = resumo;
 
         await db.SaveChangesAsync(ct);
         return Map(entidade);
@@ -67,7 +69,17 @@ public sealed class ConfiguracaoEmpresaService(LyraDbContext db) : IConfiguracao
             personalizada ?? segmento.Terminologia,
             personalizada is not null,
             e?.DataAtualizacao ?? e?.DataCriacao,
-            e?.EnviarEmails ?? false);
+            e?.EnviarEmails ?? false,
+            e?.LembretesHoras ?? [24],
+            e?.ResumoDiario ?? false);
+    }
+
+    private static int[] Lembretes(IReadOnlyList<int> horas)
+    {
+        var distintas = horas.Distinct().OrderByDescending(h => h).ToArray();
+        if (distintas.Length > 3) throw new ArgumentException("Lembretes: no máximo 3.");
+        if (distintas.Any(h => h is < 1 or > 72)) throw new ArgumentException("Lembretes: de 1 a 72 horas antes.");
+        return distintas;
     }
 
     private static TerminologiaDto? Ler(string? json)

@@ -64,6 +64,9 @@ public sealed class ApiFixture : IAsyncLifetime
                 id integer PRIMARY KEY, razao_social varchar(200) NOT NULL, nome_fantasia varchar(200),
                 email varchar(200), telefone varchar(40), endereco varchar(200), cidade varchar(100), estado varchar(2),
                 logo_token varchar(80));
+            CREATE TABLE core.pessoas (id integer PRIMARY KEY, nome_completo varchar(200) NOT NULL, email_login varchar(200));
+            CREATE TABLE core.usuarios (id integer PRIMARY KEY, email varchar(200));
+            CREATE TABLE core.usuario_pessoa (id serial PRIMARY KEY, usuario_id integer NOT NULL, pessoa_id integer NOT NULL);
             """);
 
         factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b => b
@@ -97,6 +100,14 @@ public sealed class ApiFixture : IAsyncLifetime
         using var scope = Servicos.CreateScope();
         return await scope.ServiceProvider.GetRequiredService<ProcessadorNotificacoes>()
             .ProcessarPendentesAsync(10_000, CancellationToken.None);
+    }
+
+    /// <summary>Uma passada do agendador de lembretes e resumos, com o relógio no instante dado (UTC).</summary>
+    public async Task<int> ProgramarAvisos(DateTime agora)
+    {
+        using var scope = Servicos.CreateScope();
+        return await scope.ServiceProvider.GetRequiredService<ProgramadorAvisos>()
+            .ProgramarAsync(agora, CancellationToken.None);
     }
 
     public IServiceProvider Servicos => factory?.Services

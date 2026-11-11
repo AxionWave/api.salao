@@ -42,10 +42,20 @@ public sealed class CanalEmail(
     public async Task<string?> EnviarAsync(Notificacao n, CancellationToken ct)
     {
         if (n.Destino is null) throw new NotificacaoRecusadaException("Sem e-mail de destino.");
-        var dados = FilaNotificacoes.LerDados(n.Dados);
         var empresa = await empresas.ObterAsync(n.EmpresaId, ct);
-        var link = n.AgendamentoId is int id ? links.Url(id) : null;
-        var email = ModelosEmail.Montar(n.Evento, n.AgendamentoId ?? 0, dados, empresa, link);
+        EmailMontado email;
+        if (n.Evento == EventosNotificacao.ResumoDia)
+        {
+            var resumo = JsonSerializer.Deserialize<DadosResumo>(n.Dados, Json) ?? new DadosResumo();
+            var agenda = $"{opcoes.Value.UrlPublica.TrimEnd('/')}/agenda?data={resumo.Dia}&visao=dia";
+            email = ModelosEmail.MontarResumo(resumo, empresa, agenda);
+        }
+        else
+        {
+            var dados = FilaNotificacoes.LerDados(n.Dados);
+            var link = n.AgendamentoId is int id ? links.Url(id) : null;
+            email = ModelosEmail.Montar(n.Evento, n.AgendamentoId ?? 0, dados, empresa, link);
+        }
 
         var corpo = new
         {

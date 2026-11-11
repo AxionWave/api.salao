@@ -19,14 +19,21 @@ public sealed record ConfiguracaoEmpresaDto(
     TerminologiaDto Terminologia,
     bool Personalizada,
     DateTime? DataAtualizacao,
-    bool EnviarEmails = false);
+    bool EnviarEmails = false,
+    IReadOnlyList<int>? LembretesHoras = null,
+    bool ResumoDiario = false);
 
-/// <summary>Terminologia nula = usa a do segmento. EnviarEmails nulo = mantém o atual.</summary>
+/// <summary>
+/// Terminologia nula = usa a do segmento. EnviarEmails, LembretesHoras e ResumoDiario nulos = mantêm o atual.
+/// LembretesHoras: horas antes do início (1 a 72, até 3), vazio = sem lembrete.
+/// </summary>
 public sealed record SalvarConfiguracaoRequest(
     string Segmento,
     string FusoHorario,
     TerminologiaDto? Terminologia,
-    bool? EnviarEmails = null);
+    bool? EnviarEmails = null,
+    IReadOnlyList<int>? LembretesHoras = null,
+    bool? ResumoDiario = null);
 
 public sealed record OpcoesConfiguracaoResponse(
     IReadOnlyList<SegmentoDto> Segmentos,
