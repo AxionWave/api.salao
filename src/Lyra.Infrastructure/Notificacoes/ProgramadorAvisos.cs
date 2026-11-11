@@ -37,7 +37,8 @@ public sealed class ProgramadorAvisos(
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private static readonly CultureInfo PtBr = CultureInfo.GetCultureInfo("pt-BR");
-    private static readonly string[] Ativos = [StatusAgendamento.Agendado, StatusAgendamento.Confirmado];
+    // Lista, não array: com C# 14, array.Contains vira MemoryExtensions.Contains (span), que o EF 8 não traduz.
+    private static readonly List<string> Ativos = [StatusAgendamento.Agendado, StatusAgendamento.Confirmado];
 
     /// <param name="agora">Instante (UTC) que decide o que já está na hora; nos testes, simulado.</param>
     public async Task<int> ProgramarAsync(DateTime agora, CancellationToken ct)
