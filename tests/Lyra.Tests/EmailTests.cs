@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Net;
+using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -250,6 +251,82 @@ public sealed partial class EmailTests(ApiFixture api)
         Assert.Equal(HttpStatusCode.NotFound, (await anonimo.GetAsync($"/api/salao/publico/agendamentos/{adulterado}")).StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, (await anonimo.PostAsync($"/api/salao/publico/agendamentos/{token}/confirmar", null)).StatusCode);
         Assert.Equal("cancelado", Exigir(await x.C.Admin.Get($"/api/salao/agendamentos/{id}"), 200).Json.Str("status"));
+    }
+
+    /// <summary>Agenda, envia e devolve a notificação com o id do envio que a Mensageria deu.</summary>
+    private async Task<(Contexto X, long Notificacao, string Envio)> Enviado()
+    {
+        var x = await Preparar();
+        await x.C.AgendarOk(x.Cliente, x.C.Ana, [x.C.Consulta], x.C.Terca, "15:00");
+        await api.ProcessarFila();
+        var id = Assert.Single(await Emails(x.C, x.Cliente)).GetProperty("id").GetInt64();
+        var envio = await NoBanco(db => db.Notificacoes.Where(m => m.Id == id).Select(m => m.ProvedorId!).FirstAsync());
+        return (x, id, envio);
+    }
+
+    /// <summary>A Mensageria avisando, como ela chama na rede interna.</summary>
+    private static async Task<HttpStatusCode> Avisar(Cenario c, string envio, long notificacao, string evento,
+        string? erro = null, string? token = ApiFixture.TokenInterno, int? empresa = null)
+    {
+        using var pedido = new HttpRequestMessage(HttpMethod.Post, "/api/salao/internos/mensageria/envios")
+        {
+            Content = JsonContent.Create(new
+            {
+                id = envio,
+                chave = $"lyra-notificacao-{notificacao}",
+                referencia = "agendamento:1",
+                canal = "email",
+                evento,
+                status = evento == "devolvido" ? "falhou" : evento,
+                erro,
+                data = DateTime.UtcNow,
+            }),
+        };
+        if (token is not null) pedido.Headers.Add("X-Internal-Service-Token", token);
+        pedido.Headers.Add("X-Empresa-Id", (empresa ?? c.EmpresaId).ToString(CultureInfo.InvariantCulture));
+        pedido.Headers.Add("X-Origin-System", "MSG");
+        using var resposta = await c.Http.SendAsync(pedido);
+        return resposta.StatusCode;
+    }
+
+    [Fato]
+    public async Task Aviso_da_mensageria_marca_entregue_e_spam_avisa_na_ficha()
+    {
+        var (x, n, envio) = await Enviado();
+
+        Assert.Equal(HttpStatusCode.NoContent, await Avisar(x.C, envio, n, "entregue"));
+        Assert.Equal("entregue", Assert.Single(await Emails(x.C, x.Cliente)).Str("status"));
+
+        Assert.Equal(HttpStatusCode.NoContent, await Avisar(x.C, envio, n, "reclamacao"));
+        var depois = Assert.Single(await Emails(x.C, x.Cliente));
+        Assert.Equal("entregue", depois.Str("status"));
+        Assert.Contains("spam", depois.Str("ultimoErro"));
+    }
+
+    [Fato]
+    public async Task Devolucao_vira_falha_e_entrega_atrasada_nao_desfaz()
+    {
+        var (x, n, envio) = await Enviado();
+
+        Assert.Equal(HttpStatusCode.NoContent, await Avisar(x.C, envio, n, "devolvido", "Devolvido pelo servidor do destino: caixa não existe"));
+        Assert.Equal(HttpStatusCode.NoContent, await Avisar(x.C, envio, n, "entregue"));
+
+        var e = Assert.Single(await Emails(x.C, x.Cliente));
+        Assert.Equal("falhou", e.Str("status"));
+        Assert.Contains("caixa não existe", e.Str("ultimoErro"));
+    }
+
+    [Fato]
+    public async Task Aviso_so_vale_com_token_interno_e_para_a_propria_notificacao()
+    {
+        var (x, n, envio) = await Enviado();
+        var outra = await Preparar();
+
+        Assert.Equal(HttpStatusCode.Unauthorized, await Avisar(x.C, envio, n, "entregue", token: null));
+        Assert.Equal(HttpStatusCode.Unauthorized, await Avisar(x.C, envio, n, "entregue", token: "errado"));
+        Assert.Equal(HttpStatusCode.NotFound, await Avisar(x.C, envio, n, "entregue", empresa: outra.C.EmpresaId));
+        Assert.Equal(HttpStatusCode.NotFound, await Avisar(x.C, "env_outro", n, "entregue"));
+        Assert.Equal("enviado", Assert.Single(await Emails(x.C, x.Cliente)).Str("status"));
     }
 
     private async Task<T> NoBanco<T>(Func<LyraDbContext, Task<T>> consulta)

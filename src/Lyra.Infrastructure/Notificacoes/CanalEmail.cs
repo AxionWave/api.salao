@@ -21,6 +21,8 @@ public sealed class CanalEmail(
 {
     public const string NomeCanal = "email";
     public const string SiglaSistema = "LYR";
+    /// <summary>Com o id da notificação, é a chave do envio na Mensageria; os avisos dela voltam por essa chave.</summary>
+    public const string PrefixoChave = "lyra-notificacao-";
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -49,7 +51,7 @@ public sealed class CanalEmail(
         {
             canal = "email",
             // A mesma chave em toda nova tentativa: a Mensageria não manda duas vezes.
-            chave = $"lyra-notificacao-{n.Id}",
+            chave = $"{PrefixoChave}{n.Id}",
             destino = n.Destino,
             referencia = n.AgendamentoId is int ag ? $"agendamento:{ag}" : null,
             email = new
