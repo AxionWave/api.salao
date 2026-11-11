@@ -22,6 +22,7 @@ public sealed class LyraDbContext(DbContextOptions<LyraDbContext> options) : DbC
     public DbSet<Notificacao> Notificacoes => Set<Notificacao>();
     public DbSet<PainelLeitura> PainelLeituras => Set<PainelLeitura>();
     public DbSet<AvisoProgramado> AvisosProgramados => Set<AvisoProgramado>();
+    public DbSet<PushAssinatura> PushAssinaturas => Set<PushAssinatura>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

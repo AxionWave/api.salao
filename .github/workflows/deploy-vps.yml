@@ -21,7 +21,11 @@ jobs:
     steps:
       - name: Deploy api.salao
         uses: appleboy/ssh-action@v1.2.0
+        env:
+          WEBPUSH_PUBLIC_KEY: ${{ secrets.WEBPUSH_PUBLIC_KEY }}
+          WEBPUSH_PRIVATE_KEY: ${{ secrets.WEBPUSH_PRIVATE_KEY }}
         with:
+          envs: WEBPUSH_PUBLIC_KEY,WEBPUSH_PRIVATE_KEY
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}

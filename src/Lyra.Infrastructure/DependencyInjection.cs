@@ -2,6 +2,7 @@ using Lyra.Application.Abstractions;
 using Lyra.Infrastructure.AoVivo;
 using Lyra.Infrastructure.Auth;
 using Lyra.Infrastructure.Notificacoes;
+using Lyra.Infrastructure.Notificacoes.Push;
 using Lyra.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -45,6 +46,15 @@ public static class DependencyInjection
             services.AddHttpClient<CanalEmail>(c => c.Timeout = TimeSpan.FromSeconds(20));
             services.AddScoped<ICanalNotificacao>(sp => sp.GetRequiredService<CanalEmail>());
         }
+        services.Configure<WebPushOptions>(configuration.GetSection(WebPushOptions.Secao));
+        services.AddScoped<IPushService, PushService>();
+        var webPush = configuration.GetSection(WebPushOptions.Secao).Get<WebPushOptions>();
+        if (webPush?.Configurado == true)
+        {
+            services.AddHttpClient<ClienteWebPush>(c => c.Timeout = TimeSpan.FromSeconds(15));
+            services.AddScoped<ICanalNotificacao, CanalPush>();
+        }
+
         if (configuration.GetValue(NotificacoesOptions.Secao + ":Worker", true))
         {
             services.AddHostedService<WorkerNotificacoes>();

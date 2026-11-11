@@ -1,4 +1,5 @@
 using Lyra.Infrastructure.Notificacoes;
+using Lyra.Infrastructure.Notificacoes.Push;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.SignalR.Client;
@@ -52,6 +53,11 @@ public sealed class ApiFixture : IAsyncLifetime
         Environment.SetEnvironmentVariable("Notificacoes__Canais__0", CanalTeste.NomeCanal);
         Environment.SetEnvironmentVariable("Notificacoes__Canais__1", CanalEmail.NomeCanal);
         Environment.SetEnvironmentVariable("Notificacoes__Canais__2", CanalPainel.NomeCanal);
+        Environment.SetEnvironmentVariable("Notificacoes__Canais__3", CanalPush.NomeCanal);
+        (ChavePushPublica, var chavePushPrivada) = Vapid.GerarChaves();
+        Environment.SetEnvironmentVariable("WebPush__PublicKey", ChavePushPublica);
+        Environment.SetEnvironmentVariable("WebPush__PrivateKey", chavePushPrivada);
+        Environment.SetEnvironmentVariable("WebPush__Subject", "mailto:testes@lyra.teste");
         Environment.SetEnvironmentVariable("GATEWAY_INTERNAL_TOKEN", TokenInterno);
         Environment.SetEnvironmentVariable("Email__UrlMensageria", "http://mensageria.falsa");
         Environment.SetEnvironmentVariable("Email__UrlPublica", UrlPublica);
@@ -75,6 +81,7 @@ public sealed class ApiFixture : IAsyncLifetime
             {
                 s.AddSingleton<ICanalNotificacao>(Canal);
                 s.AddHttpClient<CanalEmail>().ConfigurePrimaryHttpMessageHandler(() => Mensageria);
+                s.AddHttpClient<ClienteWebPush>().ConfigurePrimaryHttpMessageHandler(() => Push);
             }));
         _ = factory.Server;
     }
@@ -88,6 +95,10 @@ public sealed class ApiFixture : IAsyncLifetime
     public const string TokenInterno = "token-interno-dos-testes";
 
     public MensageriaFalsa Mensageria { get; } = new();
+
+    public PushFalso Push { get; } = new();
+
+    public string ChavePushPublica { get; private set; } = "";
 
     public Task ExecutarNoBanco(string sql, params object[] parametros) => Executar(banco!, sql, parametros);
 

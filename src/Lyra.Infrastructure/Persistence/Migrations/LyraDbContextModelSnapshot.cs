@@ -586,6 +586,66 @@ namespace Lyra.Infrastructure.Persistence.Migrations
                     b.ToTable("profissionais", "lyra");
                 });
 
+            modelBuilder.Entity("Lyra.Infrastructure.Persistence.Entities.PushAssinatura", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Aparelho")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("aparelho");
+
+                    b.Property<string>("Auth")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("auth");
+
+                    b.Property<DateTime>("DataCriacao")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("data_criacao");
+
+                    b.Property<int>("EmpresaId")
+                        .HasColumnType("integer")
+                        .HasColumnName("empresa_id");
+
+                    b.Property<string>("Endpoint")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("endpoint");
+
+                    b.Property<string>("P256dh")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("p256dh");
+
+                    b.Property<DateTime?>("UltimoEnvio")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ultimo_envio");
+
+                    b.Property<int>("UsuarioId")
+                        .HasColumnType("integer")
+                        .HasColumnName("usuario_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EmpresaId")
+                        .HasDatabaseName("ix_push_assinaturas_empresa");
+
+                    b.HasIndex("Endpoint")
+                        .IsUnique()
+                        .HasDatabaseName("ux_push_assinaturas_endpoint");
+
+                    b.ToTable("push_assinaturas", "lyra");
+                });
+
             modelBuilder.Entity("Lyra.Infrastructure.Persistence.Entities.Servico", b =>
                 {
                     b.Property<int>("Id")

@@ -20,6 +20,10 @@ services:
       - Notificacoes__Canais__0=email
       # Sino do painel: avisos da agenda para a equipe, ao vivo pelo hub /api/salao/hub/painel.
       - Notificacoes__Canais__1=painel
+      # Web Push: os mesmos avisos no celular/computador da equipe com o Lyra fechado. Sem as chaves VAPID o canal não existe.
+      - Notificacoes__Canais__2=push
+      - WebPush__PublicKey=${WEBPUSH_PUBLIC_KEY:-}
+      - WebPush__PrivateKey=${WEBPUSH_PRIVATE_KEY:-}
       - ConnectionStrings__Default=Host=postgres;Port=5432;Database=${POSTGRES_DB:-base};Username=${DB_USERNAME:-postgres};Password=${DB_PASSWORD};Search Path=lyra
     restart: on-failure:5
     healthcheck:
