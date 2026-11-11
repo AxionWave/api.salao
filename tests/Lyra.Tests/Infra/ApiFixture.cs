@@ -49,8 +49,8 @@ public sealed class ApiFixture : IAsyncLifetime
         Environment.SetEnvironmentVariable("Notificacoes__Worker", "false");
         Environment.SetEnvironmentVariable("Notificacoes__Canais__0", CanalTeste.NomeCanal);
         Environment.SetEnvironmentVariable("Notificacoes__Canais__1", CanalEmail.NomeCanal);
-        Environment.SetEnvironmentVariable("Email__ApiKey", "re_teste");
-        Environment.SetEnvironmentVariable("Email__UrlApi", "http://resend.falso");
+        Environment.SetEnvironmentVariable("GATEWAY_INTERNAL_TOKEN", TokenInterno);
+        Environment.SetEnvironmentVariable("Email__UrlMensageria", "http://mensageria.falsa");
         Environment.SetEnvironmentVariable("Email__UrlPublica", UrlPublica);
         Environment.SetEnvironmentVariable("Email__UrlArquivos", UrlArquivos);
 
@@ -68,7 +68,7 @@ public sealed class ApiFixture : IAsyncLifetime
             .ConfigureServices(s =>
             {
                 s.AddSingleton<ICanalNotificacao>(Canal);
-                s.AddHttpClient<CanalEmail>().ConfigurePrimaryHttpMessageHandler(() => Resend);
+                s.AddHttpClient<CanalEmail>().ConfigurePrimaryHttpMessageHandler(() => Mensageria);
             }));
         _ = factory.Server;
     }
@@ -79,7 +79,9 @@ public sealed class ApiFixture : IAsyncLifetime
 
     public CanalTeste Canal { get; } = new();
 
-    public ResendFalso Resend { get; } = new();
+    public const string TokenInterno = "token-interno-dos-testes";
+
+    public MensageriaFalsa Mensageria { get; } = new();
 
     public Task ExecutarNoBanco(string sql, params object[] parametros) => Executar(banco!, sql, parametros);
 

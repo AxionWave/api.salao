@@ -14,8 +14,9 @@ services:
       - Sentry__Dsn=${SENTRY_DSN_API:-https://e328c8fcf6bff841f3e6cd7037f5ab31@o4512408706875392.ingest.us.sentry.io/4512408734203904}
       - Sentry__Environment=production
       - Sentry__Release=${SENTRY_RELEASE:-}
-      # Sem chave o canal de e-mail não existe; com chave, só empresas que ligarem em Configurações enviam.
-      - Email__ApiKey=${RESEND_API_KEY:-}
+      # A AW.Mensageria entrega os e-mails; sem token o canal não existe. Só empresas que ligarem em Configurações enviam.
+      - GATEWAY_INTERNAL_TOKEN=${GATEWAY_INTERNAL_TOKEN}
+      - Email__UrlMensageria=${MENSAGERIA_URL:-http://mensageria:8080}
       - Notificacoes__Canais__0=email
       - ConnectionStrings__Default=Host=postgres;Port=5432;Database=${POSTGRES_DB:-base};Username=${DB_USERNAME:-postgres};Password=${DB_PASSWORD};Search Path=lyra
     restart: on-failure:5

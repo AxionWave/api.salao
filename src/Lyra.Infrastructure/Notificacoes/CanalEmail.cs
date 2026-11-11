@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Net.Mail;
 using System.Text;
 using System.Text.Json;
 using Lyra.Application.Notificacoes;
@@ -8,7 +9,10 @@ using Microsoft.Extensions.Options;
 
 namespace Lyra.Infrastructure.Notificacoes;
 
-/// <summary>E-mail ao cliente pelo Resend, com o convite de calendário anexo.</summary>
+/// <summary>
+/// E-mail ao cliente, com o convite de calendário anexo. O Lyra monta a mensagem; a AW.Mensageria entrega
+/// (remetente do Lyra, novas tentativas no provedor e lista de descadastros).
+/// </summary>
 public sealed class CanalEmail(
     HttpClient http,
     IOptions<EmailOptions> opcoes,
@@ -16,6 +20,7 @@ public sealed class CanalEmail(
     LinksPublicos links) : ICanalNotificacao
 {
     public const string NomeCanal = "email";
+    public const string SiglaSistema = "LYR";
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -40,60 +45,68 @@ public sealed class CanalEmail(
         var link = n.AgendamentoId is int id ? links.Url(id) : null;
         var email = ModelosEmail.Montar(n.Evento, n.AgendamentoId ?? 0, dados, empresa, link);
 
-        var corpo = new Dictionary<string, object?>
+        var corpo = new
         {
-            ["from"] = $"{NomeExibido(empresa?.Nome ?? "Lyra")} <{opcoes.Value.Remetente}>",
-            ["to"] = new[] { n.Destino },
-            ["subject"] = email.Assunto,
-            ["html"] = email.Html,
-            ["text"] = email.Texto,
-            ["tags"] = new[] { new { name = "evento", value = n.Evento } },
-        };
-        if (empresa?.Email is { } responder) corpo["reply_to"] = responder;
-        if (email.Ics is { } ics)
-        {
-            corpo["attachments"] = new[]
+            canal = "email",
+            // A mesma chave em toda nova tentativa: a Mensageria não manda duas vezes.
+            chave = $"lyra-notificacao-{n.Id}",
+            destino = n.Destino,
+            referencia = n.AgendamentoId is int ag ? $"agendamento:{ag}" : null,
+            email = new
             {
-                new
-                {
-                    filename = "agendamento.ics",
-                    content = Convert.ToBase64String(Encoding.UTF8.GetBytes(ics)),
-                    content_type = "text/calendar; charset=utf-8",
-                },
-            };
-        }
+                assunto = email.Assunto,
+                html = email.Html,
+                texto = email.Texto,
+                remetenteNome = empresa?.Nome ?? "Lyra",
+                // E-mail da empresa mal cadastrado não pode impedir o envio ao cliente.
+                responderPara = EmailValido(empresa?.Email) ? empresa!.Email!.Trim() : null,
+                tags = new Dictionary<string, string> { ["evento"] = n.Evento },
+                anexos = email.Ics is { } ics
+                    ? new[]
+                    {
+                        new
+                        {
+                            nome = "agendamento.ics",
+                            tipo = "text/calendar; charset=utf-8",
+                            conteudoBase64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(ics)),
+                        },
+                    }
+                    : null,
+            },
+        };
 
-        using var pedido = new HttpRequestMessage(HttpMethod.Post, $"{opcoes.Value.UrlApi.TrimEnd('/')}/emails")
+        using var pedido = new HttpRequestMessage(HttpMethod.Post, $"{opcoes.Value.UrlMensageria.TrimEnd('/')}/api/mensageria/envios")
         {
             Content = JsonContent.Create(corpo, options: Json),
         };
-        pedido.Headers.Authorization = new("Bearer", opcoes.Value.ApiKey);
-        // Se a resposta se perder e o worker tentar de novo, o Resend não manda duas vezes.
-        pedido.Headers.Add("Idempotency-Key", $"lyra-notificacao-{n.Id}");
+        pedido.Headers.Add("X-Internal-Service-Token", opcoes.Value.TokenInterno);
+        pedido.Headers.Add("X-Empresa-Id", n.EmpresaId.ToString());
+        pedido.Headers.Add("X-Origin-System", SiglaSistema);
 
         using var resposta = await http.SendAsync(pedido, ct);
         var texto = await resposta.Content.ReadAsStringAsync(ct);
         if (resposta.IsSuccessStatusCode)
         {
             using var doc = JsonDocument.Parse(texto);
-            return doc.RootElement.TryGetProperty("id", out var idResend) ? idResend.GetString() : null;
+            var envio = doc.RootElement;
+            if (envio.TryGetProperty("status", out var status) && status.GetString() == "descadastrado")
+                throw new NotificacaoRecusadaException("O cliente pediu para não receber e-mails.");
+            return envio.TryGetProperty("id", out var idEnvio) ? idEnvio.GetString() : null;
         }
 
-        var erro = $"Resend {(int)resposta.StatusCode}: {Mensagem(texto)}";
-        // 4xx (fora 408/409/429) é problema da mensagem: tentar de novo dá no mesmo.
+        var erro = $"Mensageria {(int)resposta.StatusCode}: {Mensagem(texto)}";
+        // 4xx (fora 408/429) é problema do pedido: tentar de novo dá no mesmo.
         if ((int)resposta.StatusCode is >= 400 and < 500
-            && resposta.StatusCode is not (HttpStatusCode.RequestTimeout or HttpStatusCode.Conflict or HttpStatusCode.TooManyRequests))
+            && resposta.StatusCode is not (HttpStatusCode.RequestTimeout or HttpStatusCode.TooManyRequests))
         {
             throw new NotificacaoRecusadaException(erro);
         }
         throw new HttpRequestException(erro);
     }
 
-    private static string NomeExibido(string nome)
-    {
-        var limpo = new string(nome.Where(c => c is not ('<' or '>' or '"' or '\r' or '\n')).ToArray()).Trim();
-        return $"\"{(limpo.Length > 60 ? limpo[..60] : limpo)}\"";
-    }
+    private static bool EmailValido(string? valor) =>
+        !string.IsNullOrWhiteSpace(valor) && !valor.Trim().Contains(' ')
+        && MailAddress.TryCreate(valor.Trim(), out var endereco) && endereco.Address == valor.Trim();
 
     private static string Mensagem(string texto)
     {

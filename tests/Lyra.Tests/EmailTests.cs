@@ -46,11 +46,11 @@ public sealed partial class EmailTests(ApiFixture api)
         Exigir(await c.Admin.Get($"/api/salao/clientes/{cliente}/notificacoes"), 200).Json
             .EnumerateArray().Where(n => n.Str("canal") == "email").OrderBy(n => n.GetProperty("id").GetInt64()).ToArray();
 
-    private static string Ics(ResendFalso.Pedido p) =>
-        Encoding.UTF8.GetString(Convert.FromBase64String(p.Corpo.GetProperty("attachments")[0].GetProperty("content").GetString()!));
+    private static string Ics(MensageriaFalsa.Pedido p) =>
+        Encoding.UTF8.GetString(Convert.FromBase64String(p.Email.GetProperty("anexos")[0].GetProperty("conteudoBase64").GetString()!));
 
-    private static string Token(ResendFalso.Pedido p) =>
-        LinkConfirmar().Match(p.Corpo.GetProperty("text").GetString()!).Groups[1].Value;
+    private static string Token(MensageriaFalsa.Pedido p) =>
+        LinkConfirmar().Match(p.Campo("texto")).Groups[1].Value;
 
     [GeneratedRegex(@"/c/([A-Za-z0-9_-]+)")]
     private static partial Regex LinkConfirmar();
@@ -79,21 +79,26 @@ public sealed partial class EmailTests(ApiFixture api)
         await api.ProcessarFila();
 
         var n = Assert.Single(await Emails(x.C, x.Cliente));
-        var p = Assert.Single(api.Resend.Para(x.Email));
+        var p = Assert.Single(api.Mensageria.Para(x.Email));
         Assert.Equal("enviado", n.Str("status"));
-        Assert.Equal("\"Salão Bela Teste\" <naoresponda@lyra.lumensoft.com.br>", p.Corpo.GetProperty("from").GetString());
-        Assert.Equal("contato@salao.teste", p.Corpo.GetProperty("reply_to").GetString());
-        Assert.Equal($"Horário marcado: {x.C.Terca:dd/MM} às 15:00 – Salão Bela <Teste>", p.Corpo.GetProperty("subject").GetString());
-        Assert.Equal($"lyra-notificacao-{n.GetProperty("id").GetInt64()}", p.ChaveIdempotencia);
-        Assert.Equal("Bearer re_teste", p.Autorizacao);
-        var texto = p.Corpo.GetProperty("text").GetString()!;
+        Assert.Equal("email", p.Corpo.GetProperty("canal").GetString());
+        Assert.Equal($"agendamento:{id}", p.Corpo.GetProperty("referencia").GetString());
+        Assert.Equal("Salão Bela <Teste>", p.Campo("remetenteNome"));
+        Assert.Equal("contato@salao.teste", p.Campo("responderPara"));
+        Assert.Equal($"Horário marcado: {x.C.Terca:dd/MM} às 15:00 – Salão Bela <Teste>", p.Campo("assunto"));
+        Assert.Equal("agendamento_criado", p.Email.GetProperty("tags").GetProperty("evento").GetString());
+        Assert.Equal($"lyra-notificacao-{n.GetProperty("id").GetInt64()}", p.Chave);
+        Assert.Equal(ApiFixture.TokenInterno, p.Token);
+        Assert.Equal(x.C.EmpresaId.ToString(CultureInfo.InvariantCulture), p.Empresa);
+        Assert.Equal("LYR", p.Sistema);
+        var texto = p.Campo("texto");
         Assert.Contains("Olá, Carla!", texto);
         Assert.Contains("Consulta", texto);
         Assert.Contains("Rua A, 10, São Paulo - SP", texto);
         Assert.Contains($"{ApiFixture.UrlPublica}/c/", texto);
         Assert.Contains("- Consulta (", texto);
         Assert.Contains("150,00", texto);
-        var html = p.Corpo.GetProperty("html").GetString()!;
+        var html = p.Campo("html");
         Assert.Contains("Salão Bela &lt;Teste&gt;", html);
         Assert.Contains("https://calendar.google.com/calendar/render?action=TEMPLATE", html);
         Assert.Contains("https://www.google.com/maps/search/?api=1&amp;query=", html);
@@ -104,7 +109,7 @@ public sealed partial class EmailTests(ApiFixture api)
         Assert.Contains($"DTSTART:{x.C.Terca:yyyyMMdd}T180000Z", ics);
         Assert.Contains("METHOD:PUBLISH", ics);
         var provedor = await NoBanco(db => db.Notificacoes.Where(m => m.Id == n.GetProperty("id").GetInt64()).Select(m => m.ProvedorId).FirstAsync());
-        Assert.StartsWith("resend-", provedor);
+        Assert.StartsWith("env_", provedor);
     }
 
     [Fato]
@@ -121,11 +126,10 @@ public sealed partial class EmailTests(ApiFixture api)
 
         await api.ProcessarFila();
 
-        static string Html(ResendFalso.Pedido p) => p.Corpo.GetProperty("html").GetString()!;
-        Assert.Contains($"<img src=\"{ApiFixture.UrlArquivos}/api/arquivos/publico/{token}\"", Html(Assert.Single(api.Resend.Para(comLogo.Email))));
+        Assert.Contains($"<img src=\"{ApiFixture.UrlArquivos}/api/arquivos/publico/{token}\"", Assert.Single(api.Mensageria.Para(comLogo.Email)).Campo("html"));
         foreach (var x in new[] { semLogo, tokenInvalido })
         {
-            var html = Html(Assert.Single(api.Resend.Para(x.Email)));
+            var html = Assert.Single(api.Mensageria.Para(x.Email)).Campo("html");
             Assert.DoesNotContain("<img", html);
             Assert.Contains(">SB</td>", html);
         }
@@ -141,27 +145,27 @@ public sealed partial class EmailTests(ApiFixture api)
 
         await api.ProcessarFila();
 
-        var pedidos = api.Resend.Para(x.Email);
+        var pedidos = api.Mensageria.Para(x.Email);
         Assert.Equal(3, pedidos.Length);
         var uids = pedidos.Select(p => Uid().Match(Ics(p)).Groups[1].Value).Distinct().ToArray();
         Assert.Equal($"lyra-agendamento-{id}@lyra.lumensoft.com.br", Assert.Single(uids));
-        var remarcado = pedidos.Single(p => p.Corpo.GetProperty("subject").GetString()!.StartsWith("Horário alterado"));
-        Assert.Contains("passou de", remarcado.Corpo.GetProperty("text").GetString());
-        var cancelado = pedidos.Single(p => p.Corpo.GetProperty("subject").GetString()!.StartsWith("Horário cancelado"));
-        Assert.Contains("Motivo: Imprevisto", cancelado.Corpo.GetProperty("text").GetString());
+        var remarcado = pedidos.Single(p => p.Campo("assunto").StartsWith("Horário alterado"));
+        Assert.Contains("passou de", remarcado.Campo("texto"));
+        var cancelado = pedidos.Single(p => p.Campo("assunto").StartsWith("Horário cancelado"));
+        Assert.Contains("Motivo: Imprevisto", cancelado.Campo("texto"));
         Assert.Contains("METHOD:CANCEL", Ics(cancelado));
-        Assert.DoesNotContain("/c/", cancelado.Corpo.GetProperty("text").GetString());
-        Assert.DoesNotContain("calendar.google.com", cancelado.Corpo.GetProperty("html").GetString());
-        Assert.Contains("Antes: ", remarcado.Corpo.GetProperty("text").GetString());
+        Assert.DoesNotContain("/c/", cancelado.Campo("texto"));
+        Assert.DoesNotContain("calendar.google.com", cancelado.Campo("html"));
+        Assert.Contains("Antes: ", remarcado.Campo("texto"));
     }
 
     [Fato]
-    public async Task Recusa_do_provedor_falha_sem_novas_tentativas_e_erro_temporario_tenta_de_novo()
+    public async Task Pedido_recusado_falha_sem_novas_tentativas_e_erro_temporario_tenta_de_novo()
     {
         var recusado = await Preparar();
         var instavel = await Preparar();
-        api.Resend.RespostaPorDestino[recusado.Email] = HttpStatusCode.UnprocessableEntity;
-        api.Resend.RespostaPorDestino[instavel.Email] = HttpStatusCode.ServiceUnavailable;
+        api.Mensageria.RespostaPorDestino[recusado.Email] = HttpStatusCode.BadRequest;
+        api.Mensageria.RespostaPorDestino[instavel.Email] = HttpStatusCode.ServiceUnavailable;
         await recusado.C.AgendarOk(recusado.Cliente, recusado.C.Ana, [recusado.C.Consulta], recusado.C.Terca, "15:00");
         await instavel.C.AgendarOk(instavel.Cliente, instavel.C.Ana, [instavel.C.Consulta], instavel.C.Terca, "15:00");
 
@@ -170,10 +174,37 @@ public sealed partial class EmailTests(ApiFixture api)
         var r = Assert.Single(await Emails(recusado.C, recusado.Cliente));
         var i = Assert.Single(await Emails(instavel.C, instavel.Cliente));
         Assert.Equal("falhou", r.Str("status"));
-        Assert.Contains("Resend 422", r.Str("ultimoErro"));
+        Assert.Contains("Mensageria 400", r.Str("ultimoErro"));
         Assert.Equal("pendente", i.Str("status"));
-        Assert.Contains("Resend 503", i.Str("ultimoErro"));
-        api.Resend.RespostaPorDestino.Clear();
+        Assert.Contains("Mensageria 503", i.Str("ultimoErro"));
+        api.Mensageria.RespostaPorDestino.Clear();
+    }
+
+    [Fato]
+    public async Task Cliente_descadastrado_fica_como_falha_com_o_motivo()
+    {
+        var x = await Preparar();
+        api.Mensageria.Descadastrados[x.Email] = 0;
+        await x.C.AgendarOk(x.Cliente, x.C.Ana, [x.C.Consulta], x.C.Terca, "15:00");
+
+        await api.ProcessarFila();
+
+        var n = Assert.Single(await Emails(x.C, x.Cliente));
+        Assert.Equal("falhou", n.Str("status"));
+        Assert.Contains("não receber e-mails", n.Str("ultimoErro"));
+    }
+
+    [Fato]
+    public async Task Email_da_empresa_invalido_nao_vai_como_resposta()
+    {
+        var x = await Preparar();
+        await api.ExecutarNoBanco("UPDATE core.empresas SET email = 'contato arroba salao' WHERE id = $1", x.C.EmpresaId);
+        await x.C.AgendarOk(x.Cliente, x.C.Ana, [x.C.Consulta], x.C.Terca, "15:00");
+
+        await api.ProcessarFila();
+
+        var p = Assert.Single(api.Mensageria.Para(x.Email));
+        Assert.Equal(JsonValueKind.Null, p.Email.GetProperty("responderPara").ValueKind);
     }
 
     [Fato]
@@ -182,7 +213,7 @@ public sealed partial class EmailTests(ApiFixture api)
         var x = await Preparar();
         var id = await x.C.AgendarOk(x.Cliente, x.C.Ana, [x.C.Consulta], x.C.Terca, "15:00");
         await api.ProcessarFila();
-        var token = Token(Assert.Single(api.Resend.Para(x.Email)));
+        var token = Token(Assert.Single(api.Mensageria.Para(x.Email)));
         var anonimo = x.C.Http;
 
         var ver = await anonimo.GetAsync($"/api/salao/publico/agendamentos/{token}");
@@ -201,7 +232,7 @@ public sealed partial class EmailTests(ApiFixture api)
         Assert.Equal(HttpStatusCode.OK, deNovo.StatusCode);
         Assert.Equal("confirmado", Exigir(await x.C.Admin.Get($"/api/salao/agendamentos/{id}"), 200).Json.Str("status"));
         // Quem confirmou pelo link não recebe outro e-mail dizendo que confirmou.
-        Assert.Single(api.Resend.Para(x.Email));
+        Assert.Single(api.Mensageria.Para(x.Email));
     }
 
     [Fato]
@@ -210,7 +241,7 @@ public sealed partial class EmailTests(ApiFixture api)
         var x = await Preparar();
         var id = await x.C.AgendarOk(x.Cliente, x.C.Ana, [x.C.Consulta], x.C.Terca, "15:00");
         await api.ProcessarFila();
-        var token = Token(Assert.Single(api.Resend.Para(x.Email)));
+        var token = Token(Assert.Single(api.Mensageria.Para(x.Email)));
         var adulterado = (token[0] == 'A' ? 'B' : 'A') + token[1..];
         Exigir(await x.C.Admin.Patch($"/api/salao/agendamentos/{id}/status", new { status = "cancelado" }), 200);
         var anonimo = x.C.Http;

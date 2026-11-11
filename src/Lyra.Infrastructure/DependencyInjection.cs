@@ -30,8 +30,11 @@ public static class DependencyInjection
         services.AddSingleton<LinksPublicos>();
         services.AddScoped<IAgendamentoPublicoService, AgendamentoPublicoService>();
 
+        var tokenInterno = Environment.GetEnvironmentVariable("GATEWAY_INTERNAL_TOKEN")
+            ?? configuration[EmailOptions.Secao + ":TokenInterno"];
         services.Configure<EmailOptions>(configuration.GetSection(EmailOptions.Secao));
-        if (!string.IsNullOrWhiteSpace(configuration[EmailOptions.Secao + ":ApiKey"]))
+        services.PostConfigure<EmailOptions>(o => o.TokenInterno = tokenInterno ?? "");
+        if (!string.IsNullOrWhiteSpace(tokenInterno))
         {
             services.AddHttpClient<CanalEmail>(c => c.Timeout = TimeSpan.FromSeconds(20));
             services.AddScoped<ICanalNotificacao>(sp => sp.GetRequiredService<CanalEmail>());
