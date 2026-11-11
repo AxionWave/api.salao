@@ -17,12 +17,13 @@ public sealed partial class EmailTests(ApiFixture api)
     private sealed record Contexto(Cenario C, int Cliente, string Email);
 
     /// <summary>Empresa com cadastro no Core, envio de e-mail ligado e uma cliente com e-mail.</summary>
-    private async Task<Contexto> Preparar(bool ligar = true)
+    private async Task<Contexto> Preparar(bool ligar = true, string? logoToken = null)
     {
         var c = await Criar(api);
         await api.ExecutarNoBanco(
-            "INSERT INTO core.empresas (id, razao_social, nome_fantasia, email, telefone, endereco, cidade, estado) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
-            c.EmpresaId, "Salão Teste Ltda", "Salão Bela <Teste>", "contato@salao.teste", "(11) 3333-4444", "Rua A, 10", "São Paulo", "SP");
+            "INSERT INTO core.empresas (id, razao_social, nome_fantasia, email, telefone, endereco, cidade, estado, logo_token) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+            c.EmpresaId, "Salão Teste Ltda", "Salão Bela <Teste>", "contato@salao.teste", "(11) 3333-4444", "Rua A, 10", "São Paulo", "SP",
+            (object?)logoToken ?? DBNull.Value);
         if (ligar) await LigarEmails(c, true);
         var email = $"carla.{c.EmpresaId}@cliente.teste";
         var telefone = "119" + Random.Shared.Next(10_000_000, 99_999_999).ToString(CultureInfo.InvariantCulture);
@@ -90,13 +91,44 @@ public sealed partial class EmailTests(ApiFixture api)
         Assert.Contains("Consulta", texto);
         Assert.Contains("Rua A, 10, São Paulo - SP", texto);
         Assert.Contains($"{ApiFixture.UrlPublica}/c/", texto);
-        Assert.Contains("Salão Bela &lt;Teste&gt;", p.Corpo.GetProperty("html").GetString());
+        Assert.Contains("- Consulta (", texto);
+        Assert.Contains("150,00", texto);
+        var html = p.Corpo.GetProperty("html").GetString()!;
+        Assert.Contains("Salão Bela &lt;Teste&gt;", html);
+        Assert.Contains("https://calendar.google.com/calendar/render?action=TEMPLATE", html);
+        Assert.Contains("https://www.google.com/maps/search/?api=1&amp;query=", html);
+        // Telefone fixo: sem botão de WhatsApp.
+        Assert.DoesNotContain("wa.me", html);
         var ics = Ics(p);
         Assert.Contains($"UID:lyra-agendamento-{id}@lyra.lumensoft.com.br", ics);
         Assert.Contains($"DTSTART:{x.C.Terca:yyyyMMdd}T180000Z", ics);
         Assert.Contains("METHOD:PUBLISH", ics);
         var provedor = await NoBanco(db => db.Notificacoes.Where(m => m.Id == n.GetProperty("id").GetInt64()).Select(m => m.ProvedorId).FirstAsync());
         Assert.StartsWith("resend-", provedor);
+    }
+
+    [Fato]
+    public async Task Email_mostra_o_logo_da_empresa_quando_ha_um()
+    {
+        const string token = "arq_AbCdEfGhIjKlMnOpQrStUv12";
+        var comLogo = await Preparar(logoToken: token);
+        var semLogo = await Preparar();
+        var tokenInvalido = await Preparar(logoToken: "../../etc/passwd");
+        foreach (var x in new[] { comLogo, semLogo, tokenInvalido })
+        {
+            await x.C.AgendarOk(x.Cliente, x.C.Ana, [x.C.Consulta], x.C.Terca, "15:00");
+        }
+
+        await api.ProcessarFila();
+
+        static string Html(ResendFalso.Pedido p) => p.Corpo.GetProperty("html").GetString()!;
+        Assert.Contains($"<img src=\"{ApiFixture.UrlArquivos}/api/arquivos/publico/{token}\"", Html(Assert.Single(api.Resend.Para(comLogo.Email))));
+        foreach (var x in new[] { semLogo, tokenInvalido })
+        {
+            var html = Html(Assert.Single(api.Resend.Para(x.Email)));
+            Assert.DoesNotContain("<img", html);
+            Assert.Contains(">SB</td>", html);
+        }
     }
 
     [Fato]
@@ -119,6 +151,8 @@ public sealed partial class EmailTests(ApiFixture api)
         Assert.Contains("Motivo: Imprevisto", cancelado.Corpo.GetProperty("text").GetString());
         Assert.Contains("METHOD:CANCEL", Ics(cancelado));
         Assert.DoesNotContain("/c/", cancelado.Corpo.GetProperty("text").GetString());
+        Assert.DoesNotContain("calendar.google.com", cancelado.Corpo.GetProperty("html").GetString());
+        Assert.Contains("Antes: ", remarcado.Corpo.GetProperty("text").GetString());
     }
 
     [Fato]

@@ -52,13 +52,15 @@ public sealed class ApiFixture : IAsyncLifetime
         Environment.SetEnvironmentVariable("Email__ApiKey", "re_teste");
         Environment.SetEnvironmentVariable("Email__UrlApi", "http://resend.falso");
         Environment.SetEnvironmentVariable("Email__UrlPublica", UrlPublica);
+        Environment.SetEnvironmentVariable("Email__UrlArquivos", UrlArquivos);
 
         // O cadastro de empresas é do Core; aqui só as colunas que o Lyra lê.
         await ExecutarNoBanco("""
             CREATE SCHEMA core;
             CREATE TABLE core.empresas (
                 id integer PRIMARY KEY, razao_social varchar(200) NOT NULL, nome_fantasia varchar(200),
-                email varchar(200), telefone varchar(40), endereco varchar(200), cidade varchar(100), estado varchar(2));
+                email varchar(200), telefone varchar(40), endereco varchar(200), cidade varchar(100), estado varchar(2),
+                logo_token varchar(80));
             """);
 
         factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b => b
@@ -72,6 +74,8 @@ public sealed class ApiFixture : IAsyncLifetime
     }
 
     public const string UrlPublica = "https://lyra.teste";
+
+    public const string UrlArquivos = "https://gateway.teste";
 
     public CanalTeste Canal { get; } = new();
 

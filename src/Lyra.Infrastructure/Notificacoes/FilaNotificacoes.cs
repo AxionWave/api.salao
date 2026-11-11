@@ -50,7 +50,8 @@ public sealed class FilaNotificacoes(
             .Where(p => p.Id == agendamento.ProfissionalId)
             .Select(p => p.Nome)
             .FirstAsync(ct);
-        var servicoIds = agendamento.Itens.OrderBy(i => i.Ordem).Select(i => i.ServicoId).ToList();
+        var itens = agendamento.Itens.OrderBy(i => i.Ordem).ToList();
+        var servicoIds = itens.Select(i => i.ServicoId).ToList();
         var nomes = await db.Servicos.AsNoTracking()
             .Where(s => servicoIds.Contains(s.Id))
             .ToDictionaryAsync(s => s.Id, s => s.Nome, ct);
@@ -61,6 +62,10 @@ public sealed class FilaNotificacoes(
             Cliente = cliente.Nome,
             Profissional = profissional,
             Servicos = servicoIds.Where(nomes.ContainsKey).Select(id => nomes[id]).ToList(),
+            Itens = itens
+                .Where(i => nomes.ContainsKey(i.ServicoId))
+                .Select(i => new ItemNotificacao { Nome = nomes[i.ServicoId], DuracaoMinutos = i.DuracaoMinutos, Preco = i.Preco })
+                .ToList(),
             Inicio = agendamento.Inicio,
             Fim = agendamento.Fim,
             InicioLocal = Local(agendamento.Inicio, fuso),
@@ -123,6 +128,8 @@ public sealed class DadosNotificacao
     public string Cliente { get; init; } = "";
     public string Profissional { get; init; } = "";
     public List<string> Servicos { get; init; } = [];
+    /// <summary>Serviços com duração e preço. Vazio em notificações gravadas antes deste campo.</summary>
+    public List<ItemNotificacao> Itens { get; init; } = [];
     public DateTime Inicio { get; init; }
     public DateTime Fim { get; init; }
     public string InicioLocal { get; init; } = "";
@@ -133,4 +140,11 @@ public sealed class DadosNotificacao
     public string? Origem { get; init; }
     /// <summary>Id do primeiro agendamento da cadeia de remarcações (0 quando ainda não salvo).</summary>
     public int Cadeia { get; init; }
+}
+
+public sealed class ItemNotificacao
+{
+    public string Nome { get; init; } = "";
+    public int DuracaoMinutos { get; init; }
+    public decimal Preco { get; init; }
 }

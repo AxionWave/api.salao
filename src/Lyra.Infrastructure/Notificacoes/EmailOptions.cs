@@ -14,4 +14,7 @@ public sealed class EmailOptions
 
     /// <summary>Onde o front atende os links públicos (<c>/c/{token}</c>).</summary>
     public string UrlPublica { get; set; } = "https://lyra.lumensoft.com.br";
+
+    /// <summary>Gateway que serve as imagens públicas do AW.Arquivos (logo da empresa). Vazio = e-mail sem logo.</summary>
+    public string UrlArquivos { get; set; } = "https://api.lumensoft.com.br";
 }
