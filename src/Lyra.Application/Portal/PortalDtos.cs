@@ -76,13 +76,19 @@ public sealed record SessaoClienteDto(string Token, DateTime Expira, ContaClient
 
 public sealed record SalvarContaRequest(string Nome, string Telefone);
 
+/// <summary>Alguém da família do cliente, montada pela empresa no cadastro.</summary>
+public sealed record PessoaFamiliaDto(int Id, string Nome, string? Parentesco);
+
 /// <param name="ProfissionalId">Nulo = qualquer profissional livre no horário.</param>
+/// <param name="ClienteId">Alguém da família (<see cref="PessoaFamiliaDto.Id"/>); nulo = o próprio cliente.</param>
 public sealed record AgendarPortalRequest(
     IReadOnlyList<int> ServicoIds,
     int? ProfissionalId,
     DateTime Inicio,
-    string? Observacoes);
+    string? Observacoes,
+    int? ClienteId = null);
 
+/// <param name="Para">Nome de quem vai, quando é alguém da família; nulo quando é o próprio cliente.</param>
 public sealed record AgendamentoPortalDto(
     int Id,
     string Profissional,
@@ -90,11 +96,13 @@ public sealed record AgendamentoPortalDto(
     DateTime Inicio,
     DateTime Fim,
     decimal Preco,
-    string Status);
+    string Status,
+    string? Para = null);
 
 /// <param name="Cadeia">Id do primeiro agendamento da cadeia de remarcações: o UID do evento no calendário.</param>
 /// <param name="PodeAlterar">O cliente ainda cancela ou remarca pelo site.</param>
 /// <param name="AlterarAte">Até quando ele pode (null quando a empresa não deixa).</param>
+/// <param name="Para">Nome de quem vai, quando é alguém da família; nulo quando é o próprio cliente.</param>
 public sealed record AgendamentoClienteDto(
     int Id,
     int Cadeia,
@@ -107,7 +115,8 @@ public sealed record AgendamentoClienteDto(
     decimal Preco,
     string? MotivoCancelamento,
     bool PodeAlterar,
-    DateTime? AlterarAte);
+    DateTime? AlterarAte,
+    string? Para = null);
 
 /// <param name="Proximos">Em aberto, do mais próximo ao mais distante.</param>
 /// <param name="Historico">Os 20 últimos já passados ou cancelados, do mais recente ao mais antigo.</param>
@@ -148,6 +157,7 @@ public interface IPortalService
     Task<SessaoClienteDto> EntrarAsync(string endereco, string? email, string? codigo, CancellationToken ct);
     Task<ContaClienteDto> ContaAsync(int contaId, string endereco, CancellationToken ct);
     Task<ContaClienteDto> SalvarContaAsync(int contaId, string endereco, SalvarContaRequest request, CancellationToken ct);
+    Task<IReadOnlyList<PessoaFamiliaDto>> FamiliaAsync(int contaId, string endereco, CancellationToken ct);
     Task<AgendamentoPortalDto> AgendarAsync(int contaId, string endereco, AgendarPortalRequest request, CancellationToken ct);
     Task<MeusAgendamentosDto> MeusAgendamentosAsync(int contaId, string endereco, CancellationToken ct);
     Task<HorariosLivresResponse> HorariosRemarcarAsync(

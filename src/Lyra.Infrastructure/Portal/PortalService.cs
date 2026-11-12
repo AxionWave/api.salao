@@ -288,15 +288,27 @@ public sealed class PortalService(
         var profissionalId = await LivreNoHorarioAsync(
             c, profissionais, servicoIds, request.ProfissionalId, dia, inicio, ignorarId: null, ct);
 
-        var ficha = await FichaAsync(c, conta, ct);
+        Cliente ficha;
+        string? para = null;
+        if (request.ClienteId is int clienteId)
+        {
+            ficha = (await FamiliaresAsync(c, conta, ct)).FirstOrDefault(x => x.Id == clienteId)
+                ?? throw new KeyNotFoundException("Esta pessoa não está na sua família no cadastro da empresa.");
+            para = ficha.Nome;
+        }
+        else
+        {
+            ficha = await FichaAsync(c, conta, ct);
+        }
         var abertos = await db.Agendamentos.CountAsync(a =>
             a.EmpresaId == c.EmpresaId && a.ClienteId == ficha.Id && a.Inicio > agora
             && (a.Status == StatusAgendamento.Agendado || a.Status == StatusAgendamento.Confirmado), ct);
         if (abertos >= c.Portal.LimiteAbertos)
         {
+            var quem = para is null ? "Você já tem" : $"{para} já tem";
             throw new InvalidOperationException(c.Portal.LimiteAbertos == 1
-                ? "Você já tem um horário marcado. Para marcar outro, fale com a empresa."
-                : $"Você já tem {abertos} horários marcados, o máximo pelo agendamento online. Para marcar outro, fale com a empresa.");
+                ? $"{quem} um horário marcado. Para marcar outro, fale com a empresa."
+                : $"{quem} {abertos} horários marcados, o máximo pelo agendamento online. Para marcar outro, fale com a empresa.");
         }
 
         AgendamentoDto criado;
@@ -312,7 +324,37 @@ public sealed class PortalService(
             throw new InvalidOperationException(HorarioOcupado);
         }
         return new AgendamentoPortalDto(criado.Id, criado.ProfissionalNome, criado.Servicos.Select(s => s.Nome).ToList(),
-            criado.Inicio, criado.Fim, criado.Preco, criado.Status);
+            criado.Inicio, criado.Fim, criado.Preco, criado.Status, para);
+    }
+
+    public async Task<IReadOnlyList<PessoaFamiliaDto>> FamiliaAsync(int contaId, string endereco, CancellationToken ct)
+    {
+        var c = await ContextoAsync(endereco, ct);
+        var conta = await ContaAsync(contaId, ct);
+        return (await FamiliaresAsync(c, conta, ct))
+            .Select(x => new PessoaFamiliaDto(x.Id, x.Nome, string.IsNullOrWhiteSpace(x.Parentesco) ? null : x.Parentesco.Trim()))
+            .ToList();
+    }
+
+    /// <summary>
+    /// A ficha do próprio cliente: a com o e-mail da conta, que foi verificado no login.
+    /// A achada só pelo telefone não conta, porque o telefone não é verificado.
+    /// </summary>
+    private Task<Cliente?> TitularAsync(Contexto c, ContaCliente conta, CancellationToken ct) =>
+        db.Clientes.AsNoTracking()
+            .Where(x => x.EmpresaId == c.EmpresaId && x.Email == conta.Email && x.Ativo)
+            .OrderBy(x => x.Id)
+            .FirstOrDefaultAsync(ct);
+
+    /// <summary>Quem o cliente pode agendar além dele: a família em que a empresa pôs a ficha dele. O site não cria ninguém.</summary>
+    private async Task<List<Cliente>> FamiliaresAsync(Contexto c, ContaCliente conta, CancellationToken ct)
+    {
+        var titular = await TitularAsync(c, conta, ct);
+        if (titular?.FamiliaId is not int familiaId) return [];
+        return await db.Clientes.AsNoTracking()
+            .Where(x => x.EmpresaId == c.EmpresaId && x.FamiliaId == familiaId && x.Ativo && x.Id != titular.Id)
+            .OrderBy(x => x.Nome)
+            .ToListAsync(ct);
     }
 
     public async Task<MeusAgendamentosDto> MeusAgendamentosAsync(int contaId, string endereco, CancellationToken ct)
@@ -338,9 +380,10 @@ public sealed class PortalService(
             .ToListAsync(ct);
 
         var cadeias = await CadeiasAsync(meus, ct);
+        var titularId = (await TitularAsync(c, conta, ct))?.Id;
         return new MeusAgendamentosDto(
-            proximos.Select(a => Dto(c, a, cadeias, agora)).ToList(),
-            historico.Select(a => Dto(c, a, cadeias, agora)).ToList());
+            proximos.Select(a => Dto(c, a, cadeias, agora, titularId)).ToList(),
+            historico.Select(a => Dto(c, a, cadeias, agora, titularId)).ToList());
     }
 
     public async Task<HorariosLivresResponse> HorariosRemarcarAsync(
@@ -418,7 +461,7 @@ public sealed class PortalService(
             && (a.ContaClienteId == conta.Id || a.Cliente.Email == conta.Email));
 
     private static IQueryable<Agendamento> Completos(IQueryable<Agendamento> q) =>
-        q.Include(a => a.Profissional).Include(a => a.Itens).ThenInclude(i => i.Servico);
+        q.Include(a => a.Cliente).Include(a => a.Profissional).Include(a => a.Itens).ThenInclude(i => i.Servico);
 
     private async Task<Agendamento> MeuAsync(Contexto c, ContaCliente conta, int id, CancellationToken ct) =>
         await Completos(Meus(c, conta)).FirstOrDefaultAsync(a => a.Id == id, ct)
@@ -427,7 +470,7 @@ public sealed class PortalService(
     private async Task<AgendamentoClienteDto> MeuDtoAsync(Contexto c, ContaCliente conta, int id, CancellationToken ct)
     {
         var a = await MeuAsync(c, conta, id, ct);
-        return Dto(c, a, await CadeiasAsync(Meus(c, conta), ct), DateTime.UtcNow);
+        return Dto(c, a, await CadeiasAsync(Meus(c, conta), ct), DateTime.UtcNow, (await TitularAsync(c, conta, ct))?.Id);
     }
 
     /// <summary>Id → primeiro agendamento da cadeia de remarcações (o UID do evento no calendário).</summary>
@@ -480,7 +523,8 @@ public sealed class PortalService(
             : $"Para cancelar ou remarcar, {fale}");
     }
 
-    private static AgendamentoClienteDto Dto(Contexto c, Agendamento a, Dictionary<int, int> cadeias, DateTime agora)
+    /// <param name="titularId">A ficha do próprio cliente; os horários de outra ficha levam o nome de quem vai.</param>
+    private static AgendamentoClienteDto Dto(Contexto c, Agendamento a, Dictionary<int, int> cadeias, DateTime agora, int? titularId)
     {
         var ate = AlterarAte(c, a);
         var itens = a.Itens.OrderBy(i => i.Ordem).ToList();
@@ -496,7 +540,8 @@ public sealed class PortalService(
             itens.Sum(i => i.Preco),
             a.MotivoCancelamento,
             ate is DateTime limite && agora <= limite && a.Inicio > agora,
-            ate);
+            ate,
+            titularId is int id && a.ClienteId != id ? a.Cliente.Nome : null);
     }
 
     /// <summary>O dia do horário, se ele respeita a antecedência e a janela da página.</summary>

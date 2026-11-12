@@ -85,6 +85,15 @@ public sealed class PortalController(IPortalService portal) : ControllerBase
         return await Tratar(() => portal.SalvarPreferenciasAsync(contaId, endereco, request, ct));
     }
 
+    /// <summary>Quem o cliente pode agendar além dele (família montada pela empresa). Vazio na maioria das contas.</summary>
+    [HttpGet("conta/familia")]
+    [Authorize(AuthenticationSchemes = TokensCliente.Esquema)]
+    public async Task<ActionResult<IReadOnlyList<PessoaFamiliaDto>>> Familia(string endereco, CancellationToken ct)
+    {
+        if (TokensCliente.ContaId(User) is not int contaId) return Unauthorized();
+        return await Tratar(() => portal.FamiliaAsync(contaId, endereco, ct));
+    }
+
     [HttpPost("agendamentos")]
     [Authorize(AuthenticationSchemes = TokensCliente.Esquema)]
     public async Task<ActionResult<AgendamentoPortalDto>> Agendar(string endereco, [FromBody] AgendarPortalRequest request, CancellationToken ct)

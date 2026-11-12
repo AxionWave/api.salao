@@ -639,6 +639,72 @@ public sealed class PortalTests(ApiFixture api)
     }
 
     [Fato]
+    public async Task Quem_tem_a_ficha_com_o_email_agenda_para_a_familia_montada_pela_empresa()
+    {
+        var p = await Ligar(limite: 1);
+        await LigarEmails(p);
+        var email = NovoEmail();
+        var telefone = "119" + Random.Shared.Next(10_000_000, 99_999_999).ToString(CultureInfo.InvariantCulture);
+        var carla = Exigir(await p.C.Admin.Post("/api/salao/clientes",
+            new { nome = "Carla Souza", telefone, email, ativo = true }), 201).Id;
+        var pedro = Exigir(await p.C.Admin.Post("/api/salao/clientes",
+            new { nome = "Pedro Souza", telefone, parentesco = "filho", familiaDeClienteId = carla, ativo = true }), 201).Id;
+        var tia = Exigir(await p.C.Admin.Post("/api/salao/clientes",
+            new { nome = "Tia Souza", telefone, familiaDeClienteId = carla, ativo = false }), 201).Id;
+
+        var conta = await Entrar(p, email, nome: null);
+        var familia = Exigir(await conta.Get(p.Rota("/conta/familia")), 200).Json;
+        Assert.Equal(1, familia.GetArrayLength());
+        Assert.Equal(pedro, familia[0].Int("id"));
+        Assert.Equal("Pedro Souza", familia[0].Str("nome"));
+        Assert.Equal("filho", familia[0].Str("parentesco"));
+
+        var paraPedro = Exigir(await conta.Post(p.Rota("/agendamentos"), new
+        {
+            servicoIds = new[] { p.C.Retorno }, profissionalId = p.C.Ana, inicio = Utc(p.C.Segunda, "09:00"), clienteId = pedro,
+        }), 201).Json;
+        Assert.Equal("Pedro Souza", paraPedro.Str("para"));
+        Assert.Equal(pedro, Exigir(await p.C.Admin.Get($"/api/salao/agendamentos/{paraPedro.Int("id")}"), 200).Json.Int("clienteId"));
+
+        // O limite de horários abertos vale por pessoa.
+        var meu = Exigir(await conta.Post(p.Rota("/agendamentos"), Pedido([p.C.Retorno], p.C.Ana, p.C.Terca, "09:00")), 201).Json;
+        Assert.True(meu.Nulo("para"));
+        var limite = await conta.Post(p.Rota("/agendamentos"), new
+        {
+            servicoIds = new[] { p.C.Retorno }, profissionalId = p.C.Ana, inicio = Utc(p.C.Quarta, "09:00"), clienteId = pedro,
+        });
+        Assert.Equal(409, limite.Codigo);
+        Assert.Contains("Pedro Souza já tem", limite.Json.Str("message"));
+
+        // Desativado na família, ou de outra família, não entra.
+        foreach (var outro in new[] { tia, p.C.Maria })
+        {
+            Assert.Equal(404, (await conta.Post(p.Rota("/agendamentos"), new
+            {
+                servicoIds = new[] { p.C.Retorno }, profissionalId = p.C.Ana, inicio = Utc(p.C.Quinta, "09:00"), clienteId = outro,
+            })).Codigo);
+        }
+
+        var proximos = Exigir(await conta.Get(Meus(p)), 200).Json.GetProperty("proximos");
+        Assert.Equal(2, proximos.GetArrayLength());
+        Assert.Equal("Pedro Souza", proximos.EnumerateArray().Single(a => a.Int("id") == paraPedro.Int("id")).Str("para"));
+        Assert.True(proximos.EnumerateArray().Single(a => a.Int("id") == meu.Int("id")).Nulo("para"));
+
+        // O aviso do horário do Pedro chega no e-mail da conta que marcou.
+        await api.ProcessarFila();
+        Assert.Contains(api.Mensageria.Para(email), m => m.Campo("texto").Contains("Olá, Pedro!"));
+
+        // Entrar com o telefone da família, sem o e-mail da ficha, não dá acesso à família.
+        var intrusa = await Entrar(p, NovoEmail(), "Outra", telefone);
+        Assert.Equal(0, Exigir(await intrusa.Get(p.Rota("/conta/familia")), 200).Json.GetArrayLength());
+        Assert.Equal(404, (await intrusa.Post(p.Rota("/agendamentos"), new
+        {
+            servicoIds = new[] { p.C.Retorno }, profissionalId = p.C.Ana, inicio = Utc(p.C.Quinta, "10:00"), clienteId = pedro,
+        })).Codigo);
+        Assert.Equal(401, (await p.Anonimo.Get(p.Rota("/conta/familia"))).Codigo);
+    }
+
+    [Fato]
     public async Task Token_do_cliente_e_token_da_equipe_nao_se_misturam()
     {
         var p = await Ligar();
