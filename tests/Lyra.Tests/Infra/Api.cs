@@ -34,7 +34,7 @@ public sealed class Api(HttpClient http, string token)
     public async Task<Resposta> Enviar(HttpMethod metodo, string rota, object? corpo = null)
     {
         using var pedido = new HttpRequestMessage(metodo, rota);
-        pedido.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        if (token.Length > 0) pedido.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         if (corpo is not null) pedido.Content = JsonContent.Create(corpo, options: Json);
         using var resposta = await http.SendAsync(pedido);
         var texto = await resposta.Content.ReadAsStringAsync();

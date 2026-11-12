@@ -87,7 +87,7 @@ public static partial class ModelosAviso
     public static readonly IReadOnlyList<ModeloAvisoDto> Todos =
     [
         new(EventosNotificacao.AgendamentoCriado, "Horário marcado",
-            "Quando um horário é marcado pela equipe.",
+            "Quando um horário é marcado, pela equipe ou pelo agendamento online.",
             "Horário marcado: {data} às {hora} – {empresa}",
             "Seu horário em {empresa} está marcado para {quando}.", Equipe: true),
         new(EventosNotificacao.AgendamentoRemarcado, "Horário alterado",

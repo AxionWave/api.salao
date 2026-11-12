@@ -108,7 +108,8 @@ public sealed class CanalPush(
         var feminino = termo.Genero == "f";
         return evento switch
         {
-            EventosNotificacao.AgendamentoCriado => $"{(feminino ? "Nova" : "Novo")} {termo.Singular.ToLower(PtBr)}",
+            EventosNotificacao.AgendamentoCriado => $"{(feminino ? "Nova" : "Novo")} {termo.Singular.ToLower(PtBr)}"
+                + (origem == FilaNotificacoes.OrigemCliente ? " online" : ""),
             EventosNotificacao.AgendamentoRemarcado => $"{termo.Singular} {(feminino ? "alterada" : "alterado")}",
             EventosNotificacao.AgendamentoCancelado => $"{termo.Singular} {(feminino ? "cancelada" : "cancelado")}",
             EventosNotificacao.AgendamentoConfirmado => origem == FilaNotificacoes.OrigemCliente

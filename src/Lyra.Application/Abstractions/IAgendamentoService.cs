@@ -16,7 +16,8 @@ public interface IAgendamentoService
 
     Task<AgendamentoDto?> ObterAsync(int empresaId, int id, CancellationToken ct);
 
-    Task<AgendamentoDto> CriarAsync(int empresaId, SalvarAgendamentoRequest request, CancellationToken ct);
+    /// <param name="origem">"cliente" quando foi marcado pelo portal: os avisos não têm autor da equipe.</param>
+    Task<AgendamentoDto> CriarAsync(int empresaId, SalvarAgendamentoRequest request, CancellationToken ct, string? origem = null);
 
     Task<AgendamentoDto> AtualizarAsync(int empresaId, int id, SalvarAgendamentoRequest request, CancellationToken ct);
 

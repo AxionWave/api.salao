@@ -18,6 +18,11 @@ public sealed class EmpresaConfigConfiguration : IEntityTypeConfiguration<Empres
         builder.Property(x => x.LembretesHoras).HasColumnName("lembretes_horas").HasDefaultValueSql("'{24}'::integer[]").IsRequired();
         builder.Property(x => x.ResumoDiario).HasColumnName("resumo_diario").HasDefaultValue(false);
         builder.Property(x => x.Avisos).HasColumnName("avisos").HasColumnType("jsonb");
+        builder.Property(x => x.PortalEndereco).HasColumnName("portal_endereco").HasMaxLength(40);
+        builder.Property(x => x.Portal).HasColumnName("portal").HasColumnType("jsonb");
+        builder.HasIndex(x => x.PortalEndereco).IsUnique()
+            .HasFilter("portal_endereco IS NOT NULL")
+            .HasDatabaseName("ux_empresa_config_portal_endereco");
         builder.Property(x => x.DataCriacao).HasColumnName("data_criacao").IsRequired();
         builder.Property(x => x.DataAtualizacao).HasColumnName("data_atualizacao");
     }

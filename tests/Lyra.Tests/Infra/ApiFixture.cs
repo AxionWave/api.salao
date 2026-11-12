@@ -1,5 +1,6 @@
 using Lyra.Infrastructure.Notificacoes;
 using Lyra.Infrastructure.Notificacoes.Push;
+using Lyra.Infrastructure.Portal;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.SignalR.Client;
@@ -81,6 +82,7 @@ public sealed class ApiFixture : IAsyncLifetime
             {
                 s.AddSingleton<ICanalNotificacao>(Canal);
                 s.AddHttpClient<CanalEmail>().ConfigurePrimaryHttpMessageHandler(() => Mensageria);
+                s.AddHttpClient<EmailCodigoAcesso>().ConfigurePrimaryHttpMessageHandler(() => Mensageria);
                 s.AddHttpClient<ClienteWebPush>().ConfigurePrimaryHttpMessageHandler(() => Push);
             }));
         _ = factory.Server;

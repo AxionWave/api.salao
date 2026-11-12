@@ -1,6 +1,7 @@
 using Lyra.API.Auth;
 using Lyra.Application.Abstractions;
 using Lyra.Application.Configuracao;
+using Lyra.Application.Portal;
 using Lyra.Core.Modules;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -13,6 +14,7 @@ namespace Lyra.API.Controllers;
 public sealed class ConfiguracaoController(
     IConfiguracaoEmpresaService configuracao,
     IAvisosService avisos,
+    IPortalConfigService portal,
     ICurrentUserAccessor currentUser) : ControllerBase
 {
     /// <summary>Segmento, fuso e terminologia da empresa. Todo usuário do Lyra precisa para montar a tela.</summary>
@@ -82,6 +84,31 @@ public sealed class ConfiguracaoController(
         {
             return BadRequest(new { error = "validation_error", message = ex.Message });
         }
+    }
+
+    /// <summary>Agendamento online: endereço da página e regras.</summary>
+    [HttpGet("portal")]
+    [RequireModulo(ModuleCodes.Configuracoes)]
+    public async Task<ActionResult<PortalConfigResponse>> ObterPortal(CancellationToken ct)
+    {
+        if (!TryEmpresa(out var empresaId, out var erro)) return erro;
+        return Ok(await portal.ObterAsync(empresaId, ct));
+    }
+
+    [HttpPut("portal")]
+    [RequireModulo(ModuleCodes.Configuracoes)]
+    public async Task<ActionResult<PortalConfigResponse>> SalvarPortal([FromBody] PortalConfigDto request, CancellationToken ct)
+    {
+        if (!TryEmpresa(out var empresaId, out var erro)) return erro;
+        return Ok(await portal.SalvarAsync(empresaId, request, ct));
+    }
+
+    [HttpGet("portal/disponivel")]
+    [RequireModulo(ModuleCodes.Configuracoes)]
+    public async Task<ActionResult<EnderecoDisponivelResponse>> EnderecoDisponivel([FromQuery] string? endereco, CancellationToken ct)
+    {
+        if (!TryEmpresa(out var empresaId, out var erro)) return erro;
+        return Ok(await portal.DisponivelAsync(empresaId, endereco, ct));
     }
 
     private bool TryEmpresa(out int empresaId, out ActionResult erro)

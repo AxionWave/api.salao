@@ -291,6 +291,105 @@ namespace Lyra.Infrastructure.Persistence.Migrations
                     b.ToTable("clientes", "lyra");
                 });
 
+            modelBuilder.Entity("Lyra.Infrastructure.Persistence.Entities.CodigoAcesso", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("CodigoHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("codigo_hash");
+
+                    b.Property<DateTime>("DataCriacao")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("data_criacao");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("email");
+
+                    b.Property<int>("EmpresaId")
+                        .HasColumnType("integer")
+                        .HasColumnName("empresa_id");
+
+                    b.Property<DateTime>("Expira")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expira");
+
+                    b.Property<string>("Ip")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("ip");
+
+                    b.Property<int>("Tentativas")
+                        .HasColumnType("integer")
+                        .HasColumnName("tentativas");
+
+                    b.Property<DateTime?>("UsadoEm")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("usado_em");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Email", "DataCriacao")
+                        .HasDatabaseName("ix_codigos_acesso_email");
+
+                    b.HasIndex("Ip", "DataCriacao")
+                        .HasDatabaseName("ix_codigos_acesso_ip");
+
+                    b.ToTable("codigos_acesso", "lyra");
+                });
+
+            modelBuilder.Entity("Lyra.Infrastructure.Persistence.Entities.ContaCliente", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("DataCriacao")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("data_criacao");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("email");
+
+                    b.Property<string>("Nome")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("nome");
+
+                    b.Property<string>("Telefone")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("telefone");
+
+                    b.Property<DateTime?>("UltimoAcesso")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ultimo_acesso");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Email")
+                        .IsUnique()
+                        .HasDatabaseName("ux_contas_cliente_email");
+
+                    b.ToTable("contas_cliente", "lyra");
+                });
+
             modelBuilder.Entity("Lyra.Infrastructure.Persistence.Entities.Disponibilidade", b =>
                 {
                     b.Property<int>("Id")
@@ -364,6 +463,15 @@ namespace Lyra.Infrastructure.Persistence.Migrations
                         .HasColumnName("lembretes_horas")
                         .HasDefaultValueSql("'{24}'::integer[]");
 
+                    b.Property<string>("Portal")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("portal");
+
+                    b.Property<string>("PortalEndereco")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("portal_endereco");
+
                     b.Property<bool>("ResumoDiario")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -381,6 +489,11 @@ namespace Lyra.Infrastructure.Persistence.Migrations
                         .HasColumnName("terminologia");
 
                     b.HasKey("EmpresaId");
+
+                    b.HasIndex("PortalEndereco")
+                        .IsUnique()
+                        .HasDatabaseName("ux_empresa_config_portal_endereco")
+                        .HasFilter("portal_endereco IS NOT NULL");
 
                     b.ToTable("empresa_config", "lyra");
                 });

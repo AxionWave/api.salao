@@ -101,12 +101,12 @@ public sealed class AgendamentoService(LyraDbContext db, FilaNotificacoes fila, 
         return a is null ? null : Map(a);
     }
 
-    public async Task<AgendamentoDto> CriarAsync(int empresaId, SalvarAgendamentoRequest request, CancellationToken ct)
+    public async Task<AgendamentoDto> CriarAsync(int empresaId, SalvarAgendamentoRequest request, CancellationToken ct, string? origem = null)
     {
         var v = await ValidarAsync(empresaId, request, atual: null, ct);
         await using var tx = await TravarAgendaAsync(empresaId, v.Profissional.Id, ct);
         var entidade = await NovoAgendamentoAsync(empresaId, v, ignorarId: null, remarcadoDeId: null, ct);
-        await fila.EnfileirarAsync(entidade, EventosNotificacao.AgendamentoCriado, ct);
+        await fila.EnfileirarAsync(entidade, EventosNotificacao.AgendamentoCriado, ct, origem: origem);
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
         await aoVivo.AgendaAlteradaAsync(empresaId, entidade.ProfissionalId);

@@ -58,6 +58,10 @@ X-Secret-Token: <FRONTEND_SECRET_TOKEN>
 
 Sem o módulo `LYRA000000` (ou legado `LYR0000000`) no JWT → **403**.
 
+## Portal do cliente
+
+Agendamento online em `/api/salao/publico/portal/{endereco}` (rota `salao-public` do Gateway, sem o filtro de JWT). O cliente não é usuário do Core: a conta fica em `lyra.contas_cliente`, entra com código por e-mail e recebe um token próprio (esquema `Cliente`, audiência `lyra-portal`, chave derivada do `JWT_SECRET`). Esse token só vale nas rotas do portal, e o JWT da equipe não vale nelas. O código sai pela AW.Mensageria (`GATEWAY_INTERNAL_TOKEN`); sem ela, em desenvolvimento, o código aparece no log. Detalhes em `app.salao/docs/lyra-proximos-passos.md`, Etapa 2.
+
 ## Testes
 
 `tests/Lyra.Tests` sobe a API em memória (ambiente `Testing`, token assinado de verdade) contra um banco criado só para a execução e apagado no fim. Cada teste usa uma empresa nova. Nunca aponte para o banco de homologação ou produção.

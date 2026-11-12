@@ -17,6 +17,10 @@ public sealed class EmpresaConfig
     public bool ResumoDiario { get; set; }
     /// <summary>JSON de <see cref="Lyra.Application.Configuracao.AvisosEmpresa"/>: canais por evento e textos. Nulo = tudo padrão.</summary>
     public string? Avisos { get; set; }
+    /// <summary>Endereço da página pública (<c>lyra.lumensoft.com.br/{endereco}</c>), único entre as empresas.</summary>
+    public string? PortalEndereco { get; set; }
+    /// <summary>JSON de <see cref="Lyra.Application.Portal.PortalEmpresa"/>. Nulo = portal desligado.</summary>
+    public string? Portal { get; set; }
     public DateTime DataCriacao { get; set; } = DateTime.UtcNow;
     public DateTime? DataAtualizacao { get; set; }
 }

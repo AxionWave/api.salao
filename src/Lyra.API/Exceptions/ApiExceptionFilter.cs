@@ -1,4 +1,5 @@
 using System.Net;
+using Lyra.Application.Portal;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.EntityFrameworkCore;
@@ -36,6 +37,10 @@ public sealed class ApiExceptionFilter(ILogger<ApiExceptionFilter> logger) : IEx
         if (ex is InvalidOperationException)
         {
             return ((int)HttpStatusCode.Conflict, "conflict", ex.Message);
+        }
+        if (ex is LimiteExcedidoException)
+        {
+            return ((int)HttpStatusCode.TooManyRequests, "too_many_requests", ex.Message);
         }
         if (ex is DbUpdateException db)
         {

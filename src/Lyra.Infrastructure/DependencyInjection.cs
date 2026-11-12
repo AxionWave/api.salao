@@ -4,6 +4,8 @@ using Lyra.Infrastructure.Auth;
 using Lyra.Infrastructure.Notificacoes;
 using Lyra.Infrastructure.Notificacoes.Push;
 using Lyra.Infrastructure.Persistence;
+using Lyra.Infrastructure.Portal;
+using Lyra.Application.Portal;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -47,6 +49,10 @@ public static class DependencyInjection
             services.AddHttpClient<CanalEmail>(c => c.Timeout = TimeSpan.FromSeconds(20));
             services.AddScoped<ICanalNotificacao>(sp => sp.GetRequiredService<CanalEmail>());
         }
+        services.AddHttpClient<EmailCodigoAcesso>(c => c.Timeout = TimeSpan.FromSeconds(20));
+        services.AddSingleton<ChaveCodigos>();
+        services.AddScoped<IPortalService, PortalService>();
+        services.AddScoped<IPortalConfigService, PortalConfigService>();
         services.Configure<WebPushOptions>(configuration.GetSection(WebPushOptions.Secao));
         services.AddScoped<IPushService, PushService>();
         var webPush = configuration.GetSection(WebPushOptions.Secao).Get<WebPushOptions>();

@@ -1,5 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Text;
+using Lyra.API.Auth;
+using Lyra.Application.Portal;
 using Lyra.Infrastructure;
 using Lyra.Infrastructure.AoVivo;
 using Lyra.Infrastructure.Persistence;
@@ -82,6 +84,8 @@ if (string.IsNullOrWhiteSpace(jwtSecret))
     jwtSecret = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(48));
 }
 var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret));
+var tokensCliente = new TokensCliente(jwtSecret);
+builder.Services.AddSingleton<ITokensCliente>(tokensCliente);
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -122,6 +126,12 @@ builder.Services
             options.TokenValidationParameters.SignatureValidator = (token, _) =>
                 new JwtSecurityTokenHandler().ReadJwtToken(token);
         }
+    })
+    .AddJwtBearer(TokensCliente.Esquema, options =>
+    {
+        options.MapInboundClaims = false;
+        options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
+        options.TokenValidationParameters = tokensCliente.Validacao;
     });
 
 builder.Services.AddAuthorization();
