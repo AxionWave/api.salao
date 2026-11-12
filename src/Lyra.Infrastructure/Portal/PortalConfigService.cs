@@ -31,6 +31,10 @@ public sealed class PortalConfigService(LyraDbContext db, LeitorEmpresa empresas
         {
             throw new ArgumentException($"Intervalo entre horários: {string.Join(", ", PortalEmpresa.Passos)} minutos.");
         }
+        if (request.PrazoAlteracaoHoras is < 0 or > 168)
+        {
+            throw new ArgumentException("Prazo para cancelar ou remarcar: de 0 a 168 horas (7 dias).");
+        }
         var apresentacao = string.IsNullOrWhiteSpace(request.Apresentacao) ? null : request.Apresentacao.Trim();
         if (apresentacao is { Length: > 500 }) throw new ArgumentException("Apresentação: até 500 caracteres.");
 
@@ -49,6 +53,7 @@ public sealed class PortalConfigService(LyraDbContext db, LeitorEmpresa empresas
             JanelaDias = request.JanelaDias,
             LimiteAbertos = request.LimiteAbertos,
             PassoMinutos = request.PassoMinutos,
+            PrazoAlteracaoHoras = request.PrazoAlteracaoHoras,
             ServicosOcultos = (request.ServicosOcultos ?? []).Distinct().Where(servicos.Contains).Order().ToList(),
             ProfissionaisOcultos = (request.ProfissionaisOcultos ?? []).Distinct().Where(profissionais.Contains).Order().ToList(),
         };

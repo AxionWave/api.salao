@@ -10,6 +10,9 @@ namespace Lyra.Application.Portal;
 /// <param name="JanelaDias">Até quantos dias à frente aparecem horários.</param>
 /// <param name="LimiteAbertos">Quantos horários futuros o cliente pode ter marcados ao mesmo tempo.</param>
 /// <param name="PassoMinutos">De quanto em quanto tempo os horários aparecem (10, 15, 20, 30 ou 60).</param>
+/// <param name="PrazoAlteracaoHoras">
+/// Até quantas horas antes o cliente cancela ou remarca pelo site (0 = até a hora marcada; null = não pode, só com a empresa).
+/// </param>
 public sealed record PortalConfigDto(
     bool Ativo,
     string? Endereco,
@@ -19,7 +22,8 @@ public sealed record PortalConfigDto(
     int LimiteAbertos,
     int PassoMinutos,
     IReadOnlyList<int> ServicosOcultos,
-    IReadOnlyList<int> ProfissionaisOcultos);
+    IReadOnlyList<int> ProfissionaisOcultos,
+    int? PrazoAlteracaoHoras = 24);
 
 public sealed record ItemPortalDto(int Id, string Nome);
 
@@ -56,7 +60,8 @@ public sealed record PaginaPortalDto(
     int AntecedenciaMinutos,
     int JanelaDias,
     IReadOnlyList<ServicoPortalDto> Servicos,
-    IReadOnlyList<ProfissionalPortalDto> Profissionais);
+    IReadOnlyList<ProfissionalPortalDto> Profissionais,
+    int? PrazoAlteracaoHoras);
 
 public sealed record PedirCodigoRequest(string Email);
 
@@ -85,6 +90,34 @@ public sealed record AgendamentoPortalDto(
     decimal Preco,
     string Status);
 
+/// <param name="Cadeia">Id do primeiro agendamento da cadeia de remarcações: o UID do evento no calendário.</param>
+/// <param name="PodeAlterar">O cliente ainda cancela ou remarca pelo site.</param>
+/// <param name="AlterarAte">Até quando ele pode (null quando a empresa não deixa).</param>
+public sealed record AgendamentoClienteDto(
+    int Id,
+    int Cadeia,
+    DateTime Inicio,
+    DateTime Fim,
+    string Status,
+    int ProfissionalId,
+    string Profissional,
+    IReadOnlyList<ItemPortalDto> Servicos,
+    decimal Preco,
+    string? MotivoCancelamento,
+    bool PodeAlterar,
+    DateTime? AlterarAte);
+
+/// <param name="Proximos">Em aberto, do mais próximo ao mais distante.</param>
+/// <param name="Historico">Os 20 últimos já passados ou cancelados, do mais recente ao mais antigo.</param>
+public sealed record MeusAgendamentosDto(
+    IReadOnlyList<AgendamentoClienteDto> Proximos,
+    IReadOnlyList<AgendamentoClienteDto> Historico);
+
+public sealed record CancelarPortalRequest(string? Motivo);
+
+/// <param name="ProfissionalId">Nulo = qualquer profissional livre no horário.</param>
+public sealed record RemarcarPortalRequest(int? ProfissionalId, DateTime Inicio);
+
 /// <summary>Configuração do portal pela equipe.</summary>
 public interface IPortalConfigService
 {
@@ -103,6 +136,11 @@ public interface IPortalService
     Task<ContaClienteDto> ContaAsync(int contaId, string endereco, CancellationToken ct);
     Task<ContaClienteDto> SalvarContaAsync(int contaId, string endereco, SalvarContaRequest request, CancellationToken ct);
     Task<AgendamentoPortalDto> AgendarAsync(int contaId, string endereco, AgendarPortalRequest request, CancellationToken ct);
+    Task<MeusAgendamentosDto> MeusAgendamentosAsync(int contaId, string endereco, CancellationToken ct);
+    Task<HorariosLivresResponse> HorariosRemarcarAsync(
+        int contaId, string endereco, int agendamentoId, DateOnly data, int? profissionalId, CancellationToken ct);
+    Task<AgendamentoClienteDto> CancelarAsync(int contaId, string endereco, int agendamentoId, CancelarPortalRequest request, CancellationToken ct);
+    Task<AgendamentoClienteDto> RemarcarAsync(int contaId, string endereco, int agendamentoId, RemarcarPortalRequest request, CancellationToken ct);
 }
 
 /// <summary>Token do cliente no portal: chave e audiência próprias, não serve nas rotas da equipe.</summary>

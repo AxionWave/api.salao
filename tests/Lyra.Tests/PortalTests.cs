@@ -16,7 +16,7 @@ public sealed class PortalTests(ApiFixture api)
 
     private async Task<Portal> Ligar(
         Cenario? cenario = null, int antecedencia = 120, int janela = 60, int limite = 2,
-        int[]? servicosOcultos = null, int[]? profissionaisOcultos = null)
+        int[]? servicosOcultos = null, int[]? profissionaisOcultos = null, int? prazo = 24)
     {
         var c = cenario ?? await Cenario.Criar(api);
         var endereco = $"teste-{c.EmpresaId}";
@@ -31,6 +31,7 @@ public sealed class PortalTests(ApiFixture api)
             passoMinutos = 30,
             servicosOcultos = servicosOcultos ?? [],
             profissionaisOcultos = profissionaisOcultos ?? [],
+            prazoAlteracaoHoras = prazo,
         }), 200);
         return new Portal(c, endereco, new Api(c.Http, ""));
     }
@@ -264,16 +265,19 @@ public sealed class PortalTests(ApiFixture api)
     public async Task Agendar_liga_a_ficha_que_ja_existe_pelo_telefone_ou_email()
     {
         var p = await Ligar();
+        await LigarEmails(p);
         var maria = Exigir(await p.C.Admin.Get($"/api/salao/clientes/{p.C.Maria}"), 200).Json;
         var email = NovoEmail();
         var cliente = await Entrar(p, email, "Maria pelo site", maria.Str("telefone"));
         var r = Exigir(await cliente.Post(p.Rota("/agendamentos"), Pedido([p.C.Retorno], null, p.C.Segunda, "09:00")), 201).Json;
         var ag = Exigir(await p.C.Admin.Get($"/api/salao/agendamentos/{r.Int("id")}"), 200).Json;
         Assert.Equal(p.C.Maria, ag.Int("clienteId"));
-        // A ficha não tinha e-mail: ganha o confirmado pelo código, e o nome da ficha fica.
+        // O telefone não é verificado: a ficha não ganha o e-mail da conta, mas o aviso vai para ele.
         maria = Exigir(await p.C.Admin.Get($"/api/salao/clientes/{p.C.Maria}"), 200).Json;
-        Assert.Equal(email, maria.Str("email"));
+        Assert.True(maria.Nulo("email"));
         Assert.Equal("Maria", maria.Str("nome"));
+        await api.ProcessarFila();
+        Assert.Contains(api.Mensageria.Para(email), m => m.Campo("assunto").StartsWith("Horário marcado"));
 
         // Pelo e-mail vale mesmo com outro telefone na conta.
         var emailPaula = NovoEmail();
@@ -370,6 +374,184 @@ public sealed class PortalTests(ApiFixture api)
         Assert.Equal(409, (await cliente.Post(p.Rota("/agendamentos"), Pedido([p.C.Retorno], p.C.Ana, p.C.Segunda, "10:10"))).Codigo);
         // Fora do expediente.
         Assert.Equal(409, (await cliente.Post(p.Rota("/agendamentos"), Pedido([p.C.Retorno], p.C.Ana, p.C.Segunda, "20:00"))).Codigo);
+    }
+
+    private static async Task LigarEmails(Portal p) => Exigir(await p.C.Admin.Put("/api/salao/configuracao/avisos",
+        new { enviarEmails = true, lembretesHoras = new[] { 24 }, resumoDiario = false, eventos = Array.Empty<object>() }), 200);
+
+    private static string Meus(Portal p, string resto = "") => p.Rota("/meus-agendamentos" + resto);
+
+    private static int[] Ids(JsonElement lista, string nome) =>
+        lista.GetProperty(nome).EnumerateArray().Select(x => x.Int("id")).ToArray();
+
+    private static DateTime Instante(string utc) =>
+        DateTime.Parse(utc, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal);
+
+    private Task MoverParaDaquiA(int agendamento, string intervalo) => api.ExecutarNoBanco(
+        $"UPDATE lyra.agendamentos SET inicio = now() + interval '{intervalo}', fim = now() + interval '{intervalo}' + (fim - inicio) WHERE id = $1",
+        agendamento);
+
+    [Fato]
+    public async Task Area_lista_proximos_e_historico_e_cancela_com_motivo()
+    {
+        var p = await Ligar();
+        await LigarEmails(p);
+        var email = NovoEmail();
+        var cliente = await Entrar(p, email, "Clara");
+        var a1 = Exigir(await cliente.Post(p.Rota("/agendamentos"), Pedido([p.C.Retorno], p.C.Ana, p.C.Segunda, "10:00")), 201).Json.Int("id");
+        var a2 = Exigir(await cliente.Post(p.Rota("/agendamentos"), Pedido([p.C.Consulta], p.C.Ana, p.C.Terca, "10:00")), 201).Json.Int("id");
+        Assert.Equal(401, (await p.Anonimo.Get(Meus(p))).Codigo);
+
+        var lista = Exigir(await cliente.Get(Meus(p)), 200).Json;
+        Assert.Equal([a1, a2], Ids(lista, "proximos"));
+        Assert.Empty(Ids(lista, "historico"));
+        var primeiro = lista.GetProperty("proximos")[0];
+        Assert.True(primeiro.GetProperty("podeAlterar").GetBoolean());
+        Assert.Equal(a1, primeiro.Int("cadeia"));
+        Assert.Equal("Ana", primeiro.Str("profissional"));
+        Assert.Equal(["Retorno"], primeiro.GetProperty("servicos").EnumerateArray().Select(x => x.Str("nome")));
+        Assert.Equal(150m, lista.GetProperty("proximos")[1].GetProperty("preco").GetDecimal());
+
+        // Já atendido vai para o histórico e não se altera mais.
+        await api.ExecutarNoBanco(
+            "UPDATE lyra.agendamentos SET inicio = inicio - interval '30 days', fim = fim - interval '30 days', status = 'concluido' WHERE id = $1", a2);
+        Assert.Equal(409, (await cliente.Post(Meus(p, $"/{a2}/cancelar"), new { })).Codigo);
+
+        var cancelado = Exigir(await cliente.Post(Meus(p, $"/{a1}/cancelar"), new { motivo = " Imprevisto " }), 200).Json;
+        Assert.Equal("cancelado", cancelado.Str("status"));
+        Assert.Equal("Imprevisto", cancelado.Str("motivoCancelamento"));
+        Assert.False(cancelado.GetProperty("podeAlterar").GetBoolean());
+        Assert.Equal(409, (await cliente.Post(Meus(p, $"/{a1}/cancelar"), new { })).Codigo);
+
+        lista = Exigir(await cliente.Get(Meus(p)), 200).Json;
+        Assert.Empty(Ids(lista, "proximos"));
+        Assert.Equal([a1, a2], Ids(lista, "historico"));
+
+        // A equipe vê que foi o cliente; o cliente recebe o cancelamento por e-mail.
+        await api.ProcessarFila();
+        var sino = Exigir(await p.C.Admin.Get("/api/salao/painel/notificacoes"), 200).Json;
+        var aviso = sino.GetProperty("itens").EnumerateArray().Single(x => x.Str("evento") == "agendamento_cancelado");
+        Assert.Equal("cliente", aviso.Str("origem"));
+        Assert.Equal("Clara", aviso.Str("cliente"));
+        var email1 = api.Mensageria.Para(email).Single(m => m.Campo("assunto").StartsWith("Horário cancelado"));
+        Assert.Contains("Motivo: Imprevisto", email1.Campo("texto"));
+    }
+
+    [Fato]
+    public async Task Prazo_para_alterar_vale_e_a_empresa_pode_nao_deixar()
+    {
+        var c = await Cenario.Criar(api);
+        var p = await Ligar(c);
+        var cliente = await Entrar(p, NovoEmail());
+        var id = Exigir(await cliente.Post(p.Rota("/agendamentos"), Pedido([c.Retorno], c.Ana, c.Segunda, "10:00")), 201).Json.Int("id");
+        Assert.Equal(24, Exigir(await p.Anonimo.Get(p.Rota()), 200).Json.Int("prazoAlteracaoHoras"));
+
+        // Faltando 3 horas, com prazo de 24: só falando com a empresa.
+        await MoverParaDaquiA(id, "3 hours");
+        var item = Exigir(await cliente.Get(Meus(p)), 200).Json.GetProperty("proximos")[0];
+        Assert.False(item.GetProperty("podeAlterar").GetBoolean());
+        Assert.False(item.Nulo("alterarAte"));
+        var r = await cliente.Post(Meus(p, $"/{id}/cancelar"), new { });
+        Assert.Equal(409, r.Codigo);
+        Assert.Contains("24 horas", r.Mensagem);
+        Assert.Equal(409, (await cliente.Post(Meus(p, $"/{id}/remarcar"),
+            new { profissionalId = c.Ana, inicio = Utc(c.Terca, "10:00") })).Codigo);
+
+        // Prazo 0: até a hora marcada.
+        p = await Ligar(c, prazo: 0);
+        Assert.True(Exigir(await cliente.Get(Meus(p)), 200).Json.GetProperty("proximos")[0].GetProperty("podeAlterar").GetBoolean());
+
+        // Sem prazo: a empresa não deixa alterar pelo site.
+        p = await Ligar(c, prazo: null);
+        Assert.True(Exigir(await p.Anonimo.Get(p.Rota()), 200).Json.Nulo("prazoAlteracaoHoras"));
+        item = Exigir(await cliente.Get(Meus(p)), 200).Json.GetProperty("proximos")[0];
+        Assert.False(item.GetProperty("podeAlterar").GetBoolean());
+        Assert.True(item.Nulo("alterarAte"));
+        r = await cliente.Post(Meus(p, $"/{id}/cancelar"), new { });
+        Assert.Equal(409, r.Codigo);
+        Assert.Contains("fale com a empresa", r.Mensagem);
+
+        Assert.Equal(400, (await c.Admin.Put("/api/salao/configuracao/portal", new
+        {
+            ativo = true, endereco = p.Endereco, antecedenciaMinutos = 0, janelaDias = 30, limiteAbertos = 1, passoMinutos = 15,
+            servicosOcultos = Array.Empty<int>(), profissionaisOcultos = Array.Empty<int>(), prazoAlteracaoHoras = 169,
+        })).Codigo);
+    }
+
+    [Fato]
+    public async Task Remarcar_pelo_site_usa_os_mesmos_servicos_e_pode_encostar_no_proprio_horario()
+    {
+        var p = await Ligar();
+        await LigarEmails(p);
+        var email = NovoEmail();
+        var cliente = await Entrar(p, email, "Rita");
+        // Consulta: 30 min + 10 de preparo, então 10:30 cruza com o próprio horário das 10:00.
+        var id = Exigir(await cliente.Post(p.Rota("/agendamentos"), Pedido([p.C.Consulta], p.C.Ana, p.C.Segunda, "10:00")), 201).Json.Int("id");
+
+        var grade = Exigir(await cliente.Get(Meus(p, $"/{id}/horarios?data={Dia(p.C.Segunda)}")), 200).Json;
+        var horas = grade.GetProperty("profissionais").EnumerateArray().Single(x => x.Int("profissionalId") == p.C.Ana)
+            .GetProperty("horarios").EnumerateArray().Select(h => h.GetProperty("inicio").GetDateTime().ToUniversalTime()).ToList();
+        Assert.Contains(Instante(Utc(p.C.Segunda, "10:00")), horas);
+        Assert.Contains(Instante(Utc(p.C.Segunda, "10:30")), horas);
+
+        Assert.Equal(400, (await cliente.Post(Meus(p, $"/{id}/remarcar"), new { inicio = Utc(p.C.Segunda, "10:00") })).Codigo);
+        var novo = Exigir(await cliente.Post(Meus(p, $"/{id}/remarcar"), new { inicio = Utc(p.C.Segunda, "10:30") }), 200).Json;
+        Assert.NotEqual(id, novo.Int("id"));
+        Assert.Equal(id, novo.Int("cadeia"));
+        Assert.Equal(Instante(Utc(p.C.Segunda, "10:30")), novo.GetProperty("inicio").GetDateTime().ToUniversalTime());
+        Assert.Equal(["Consulta"], novo.GetProperty("servicos").EnumerateArray().Select(x => x.Str("nome")));
+
+        // O anterior não aparece mais (nem no histórico) e não se remarca de novo.
+        var lista = Exigir(await cliente.Get(Meus(p)), 200).Json;
+        Assert.Equal([novo.Int("id")], Ids(lista, "proximos"));
+        Assert.Empty(Ids(lista, "historico"));
+        Assert.Equal(409, (await cliente.Post(Meus(p, $"/{id}/remarcar"), new { inicio = Utc(p.C.Terca, "10:00") })).Codigo);
+
+        // A remarcação herda a conta: o novo também se altera pelo site, na mesma cadeia.
+        var terceiro = Exigir(await cliente.Post(Meus(p, $"/{novo.Int("id")}/remarcar"), new { inicio = Utc(p.C.Terca, "11:00") }), 200).Json;
+        Assert.Equal(id, terceiro.Int("cadeia"));
+
+        // Horário ocupado por outra pessoa.
+        await p.C.AgendarOk(p.C.Joao, p.C.Ana, [p.C.Retorno], p.C.Quarta, "09:00");
+        var ocupado = await cliente.Post(Meus(p, $"/{terceiro.Int("id")}/remarcar"), new { profissionalId = p.C.Ana, inicio = Utc(p.C.Quarta, "09:00") });
+        Assert.Equal(409, ocupado.Codigo);
+        Assert.Equal("Este horário não está mais livre. Escolha outro.", ocupado.Mensagem);
+
+        await api.ProcessarFila();
+        var sino = Exigir(await p.C.Admin.Get("/api/salao/painel/notificacoes"), 200).Json;
+        Assert.Contains(sino.GetProperty("itens").EnumerateArray(),
+            x => x.Str("evento") == "agendamento_remarcado" && x.Str("origem") == "cliente");
+        Assert.Contains(api.Mensageria.Para(email), m => m.Campo("assunto").StartsWith("Horário alterado"));
+    }
+
+    [Fato]
+    public async Task Area_mostra_so_o_que_e_da_conta_ou_do_email_dela()
+    {
+        var p = await Ligar();
+        var maria = Exigir(await p.C.Admin.Get($"/api/salao/clientes/{p.C.Maria}"), 200).Json;
+        var daMaria = await p.C.AgendarOk(p.C.Maria, p.C.Ana, [p.C.Retorno], p.C.Terca, "10:00");
+
+        // Quem entra com o telefone da Maria marca na ficha dela, mas só vê o que marcou.
+        var intrusa = await Entrar(p, NovoEmail(), "Outra", maria.Str("telefone"));
+        var meu = Exigir(await intrusa.Post(p.Rota("/agendamentos"), Pedido([p.C.Retorno], p.C.Ana, p.C.Segunda, "09:00")), 201).Json.Int("id");
+        var lista = Exigir(await intrusa.Get(Meus(p)), 200).Json;
+        Assert.Equal([meu], Ids(lista, "proximos"));
+        Assert.Equal(404, (await intrusa.Post(Meus(p, $"/{daMaria}/cancelar"), new { })).Codigo);
+        Assert.Equal(404, (await intrusa.Get(Meus(p, $"/{daMaria}/horarios?data={Dia(p.C.Segunda)}"))).Codigo);
+
+        // Ficha com o e-mail da conta: o que a equipe marcou também aparece.
+        var email = NovoEmail();
+        var paula = Exigir(await p.C.Admin.Post("/api/salao/clientes",
+            new { nome = "Paula", telefone = "11944443333", email, ativo = true }), 201).Id;
+        var daPaula = await p.C.AgendarOk(paula, p.C.Bruno, [p.C.Retorno], p.C.Terca, "11:00");
+        var conta = await Entrar(p, email, nome: null);
+        Assert.Equal([daPaula], Ids(Exigir(await conta.Get(Meus(p)), 200).Json, "proximos"));
+
+        // Outra conta não alcança.
+        var estranha = await Entrar(p, NovoEmail());
+        Assert.Empty(Ids(Exigir(await estranha.Get(Meus(p)), 200).Json, "proximos"));
+        Assert.Equal(404, (await estranha.Post(Meus(p, $"/{meu}/cancelar"), new { })).Codigo);
+        Assert.Equal(401, (await p.C.Admin.Get(Meus(p))).Codigo);
     }
 
     [Fato]

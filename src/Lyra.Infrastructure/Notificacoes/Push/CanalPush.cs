@@ -110,8 +110,12 @@ public sealed class CanalPush(
         {
             EventosNotificacao.AgendamentoCriado => $"{(feminino ? "Nova" : "Novo")} {termo.Singular.ToLower(PtBr)}"
                 + (origem == FilaNotificacoes.OrigemCliente ? " online" : ""),
-            EventosNotificacao.AgendamentoRemarcado => $"{termo.Singular} {(feminino ? "alterada" : "alterado")}",
-            EventosNotificacao.AgendamentoCancelado => $"{termo.Singular} {(feminino ? "cancelada" : "cancelado")}",
+            EventosNotificacao.AgendamentoRemarcado => origem == FilaNotificacoes.OrigemCliente
+                ? $"{termos.Cliente.Singular} remarcou"
+                : $"{termo.Singular} {(feminino ? "alterada" : "alterado")}",
+            EventosNotificacao.AgendamentoCancelado => origem == FilaNotificacoes.OrigemCliente
+                ? $"{termos.Cliente.Singular} cancelou"
+                : $"{termo.Singular} {(feminino ? "cancelada" : "cancelado")}",
             EventosNotificacao.AgendamentoConfirmado => origem == FilaNotificacoes.OrigemCliente
                 ? $"{termos.Cliente.Singular} confirmou presença"
                 : "Presença confirmada",

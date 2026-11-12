@@ -52,6 +52,13 @@ public sealed class FilaNotificacoes(
             await db.Entry(agendamento).Collection(a => a.Itens).LoadAsync(ct);
         }
         var cliente = await db.Clientes.AsNoTracking().FirstAsync(c => c.Id == agendamento.ClienteId, ct);
+        if (agendamento.ContaClienteId is int contaId)
+        {
+            // Marcado pelo portal: o e-mail verificado da conta vale mais que o da ficha, que pode ter sido
+            // achada pelo telefone e ser de outra pessoa.
+            cliente.Email = await db.ContasCliente.AsNoTracking()
+                .Where(x => x.Id == contaId).Select(x => x.Email).FirstOrDefaultAsync(ct) ?? cliente.Email;
+        }
         var profissional = await db.Profissionais.AsNoTracking()
             .Where(p => p.Id == agendamento.ProfissionalId)
             .Select(p => p.Nome)

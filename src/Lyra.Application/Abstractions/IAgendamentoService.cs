@@ -17,17 +17,23 @@ public interface IAgendamentoService
     Task<AgendamentoDto?> ObterAsync(int empresaId, int id, CancellationToken ct);
 
     /// <param name="origem">"cliente" quando foi marcado pelo portal: os avisos não têm autor da equipe.</param>
-    Task<AgendamentoDto> CriarAsync(int empresaId, SalvarAgendamentoRequest request, CancellationToken ct, string? origem = null);
+    /// <param name="contaClienteId">Conta do portal que marcou.</param>
+    Task<AgendamentoDto> CriarAsync(
+        int empresaId, SalvarAgendamentoRequest request, CancellationToken ct, string? origem = null, int? contaClienteId = null);
 
     Task<AgendamentoDto> AtualizarAsync(int empresaId, int id, SalvarAgendamentoRequest request, CancellationToken ct);
 
-    Task<AgendamentoDto> AlterarStatusAsync(int empresaId, int id, string status, string? motivo, CancellationToken ct);
+    /// <param name="origem">"cliente" quando o próprio cliente cancelou pelo portal.</param>
+    Task<AgendamentoDto> AlterarStatusAsync(
+        int empresaId, int id, string status, string? motivo, CancellationToken ct, string? origem = null);
 
     /// <summary>
     /// Marca um novo horário para o mesmo cliente. Se o original ainda estava em aberto, é cancelado
-    /// junto; se foi falta ou cancelamento, fica como está. Devolve o novo agendamento.
+    /// junto; se foi falta ou cancelamento, fica como está. O novo herda a conta do portal. Devolve o novo agendamento.
     /// </summary>
-    Task<AgendamentoDto> RemarcarAsync(int empresaId, int id, SalvarAgendamentoRequest request, CancellationToken ct);
+    /// <param name="origem">"cliente" quando o próprio cliente remarcou pelo portal.</param>
+    Task<AgendamentoDto> RemarcarAsync(
+        int empresaId, int id, SalvarAgendamentoRequest request, CancellationToken ct, string? origem = null);
 
     Task<HorariosLivresResponse> HorariosLivresAsync(int empresaId, HorariosLivresRequest request, CancellationToken ct);
 }

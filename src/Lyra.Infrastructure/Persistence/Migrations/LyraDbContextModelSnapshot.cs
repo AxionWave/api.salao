@@ -36,6 +36,10 @@ namespace Lyra.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("cliente_id");
 
+                    b.Property<int?>("ContaClienteId")
+                        .HasColumnType("integer")
+                        .HasColumnName("conta_cliente_id");
+
                     b.Property<DateTime?>("DataAtualizacao")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("data_atualizacao");
@@ -89,6 +93,9 @@ namespace Lyra.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ClienteId");
+
+                    b.HasIndex("ContaClienteId")
+                        .HasDatabaseName("ix_agendamentos_conta_cliente_id");
 
                     b.HasIndex("EmpresaId")
                         .HasDatabaseName("ix_agendamentos_empresa_id");
@@ -851,6 +858,11 @@ namespace Lyra.Infrastructure.Persistence.Migrations
                         .HasForeignKey("ClienteId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("Lyra.Infrastructure.Persistence.Entities.ContaCliente", null)
+                        .WithMany()
+                        .HasForeignKey("ContaClienteId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("Lyra.Infrastructure.Persistence.Entities.Profissional", "Profissional")
                         .WithMany()

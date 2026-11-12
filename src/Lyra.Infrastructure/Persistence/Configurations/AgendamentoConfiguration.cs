@@ -26,6 +26,12 @@ public sealed class AgendamentoConfiguration : IEntityTypeConfiguration<Agendame
             .WithMany()
             .HasForeignKey(x => x.RemarcadoDeId)
             .OnDelete(DeleteBehavior.SetNull);
+        builder.Property(x => x.ContaClienteId).HasColumnName("conta_cliente_id");
+        builder.HasIndex(x => x.ContaClienteId).HasDatabaseName("ix_agendamentos_conta_cliente_id");
+        builder.HasOne<ContaCliente>()
+            .WithMany()
+            .HasForeignKey(x => x.ContaClienteId)
+            .OnDelete(DeleteBehavior.SetNull);
         builder.Property(x => x.DataCriacao).HasColumnName("data_criacao").IsRequired();
         builder.Property(x => x.DataAtualizacao).HasColumnName("data_atualizacao");
 

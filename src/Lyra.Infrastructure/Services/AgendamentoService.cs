@@ -101,11 +101,13 @@ public sealed class AgendamentoService(LyraDbContext db, FilaNotificacoes fila, 
         return a is null ? null : Map(a);
     }
 
-    public async Task<AgendamentoDto> CriarAsync(int empresaId, SalvarAgendamentoRequest request, CancellationToken ct, string? origem = null)
+    public async Task<AgendamentoDto> CriarAsync(
+        int empresaId, SalvarAgendamentoRequest request, CancellationToken ct, string? origem = null, int? contaClienteId = null)
     {
         var v = await ValidarAsync(empresaId, request, atual: null, ct);
         await using var tx = await TravarAgendaAsync(empresaId, v.Profissional.Id, ct);
         var entidade = await NovoAgendamentoAsync(empresaId, v, ignorarId: null, remarcadoDeId: null, ct);
+        entidade.ContaClienteId = contaClienteId;
         await fila.EnfileirarAsync(entidade, EventosNotificacao.AgendamentoCriado, ct, origem: origem);
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
@@ -113,7 +115,8 @@ public sealed class AgendamentoService(LyraDbContext db, FilaNotificacoes fila, 
         return (await ObterAsync(empresaId, entidade.Id, ct))!;
     }
 
-    public async Task<AgendamentoDto> RemarcarAsync(int empresaId, int id, SalvarAgendamentoRequest request, CancellationToken ct)
+    public async Task<AgendamentoDto> RemarcarAsync(
+        int empresaId, int id, SalvarAgendamentoRequest request, CancellationToken ct, string? origem = null)
     {
         var original = await db.Agendamentos.FirstOrDefaultAsync(x => x.Id == id && x.EmpresaId == empresaId, ct)
             ?? throw new KeyNotFoundException("Agendamento não encontrado.");
@@ -132,13 +135,14 @@ public sealed class AgendamentoService(LyraDbContext db, FilaNotificacoes fila, 
         var v = await ValidarAsync(empresaId, request with { ClienteId = original.ClienteId }, atual: null, ct);
         await using var tx = await TravarAgendaAsync(empresaId, v.Profissional.Id, ct);
         var novo = await NovoAgendamentoAsync(empresaId, v, emAberto ? original.Id : null, original.Id, ct);
+        novo.ContaClienteId = original.ContaClienteId;
         if (emAberto)
         {
             original.Status = StatusAgendamento.Cancelado;
             original.MotivoCancelamento = "Remarcado";
             original.DataAtualizacao = DateTime.UtcNow;
         }
-        await fila.EnfileirarAsync(novo, EventosNotificacao.AgendamentoRemarcado, ct, inicioAnterior: original.Inicio);
+        await fila.EnfileirarAsync(novo, EventosNotificacao.AgendamentoRemarcado, ct, inicioAnterior: original.Inicio, origem: origem);
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
         await aoVivo.AgendaAlteradaAsync(empresaId);
@@ -242,7 +246,8 @@ public sealed class AgendamentoService(LyraDbContext db, FilaNotificacoes fila, 
         return (await ObterAsync(empresaId, id, ct))!;
     }
 
-    public async Task<AgendamentoDto> AlterarStatusAsync(int empresaId, int id, string status, string? motivo, CancellationToken ct)
+    public async Task<AgendamentoDto> AlterarStatusAsync(
+        int empresaId, int id, string status, string? motivo, CancellationToken ct, string? origem = null)
     {
         motivo = string.IsNullOrWhiteSpace(motivo) ? null : motivo.Trim();
         if (motivo is { Length: > 200 })
@@ -281,7 +286,7 @@ public sealed class AgendamentoService(LyraDbContext db, FilaNotificacoes fila, 
         entidade.DataAtualizacao = DateTime.UtcNow;
         if (mudou && novo == StatusAgendamento.Cancelado)
         {
-            await fila.EnfileirarAsync(entidade, EventosNotificacao.AgendamentoCancelado, ct, motivo: motivo);
+            await fila.EnfileirarAsync(entidade, EventosNotificacao.AgendamentoCancelado, ct, motivo: motivo, origem: origem);
         }
         else if (mudou && novo == StatusAgendamento.Confirmado)
         {

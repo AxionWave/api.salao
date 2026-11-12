@@ -60,7 +60,7 @@ Sem o módulo `LYRA000000` (ou legado `LYR0000000`) no JWT → **403**.
 
 ## Portal do cliente
 
-Agendamento online em `/api/salao/publico/portal/{endereco}` (rota `salao-public` do Gateway, sem o filtro de JWT). O cliente não é usuário do Core: a conta fica em `lyra.contas_cliente`, entra com código por e-mail e recebe um token próprio (esquema `Cliente`, audiência `lyra-portal`, chave derivada do `JWT_SECRET`). Esse token só vale nas rotas do portal, e o JWT da equipe não vale nelas. O código sai pela AW.Mensageria (`GATEWAY_INTERNAL_TOKEN`); sem ela, em desenvolvimento, o código aparece no log. Detalhes em `app.salao/docs/lyra-proximos-passos.md`, Etapa 2.
+Agendamento online em `/api/salao/publico/portal/{endereco}` (rota `salao-public` do Gateway, sem o filtro de JWT). O cliente não é usuário do Core: a conta fica em `lyra.contas_cliente`, entra com código por e-mail e recebe um token próprio (esquema `Cliente`, audiência `lyra-portal`, chave derivada do `JWT_SECRET`). Esse token só vale nas rotas do portal, e o JWT da equipe não vale nelas. O código sai pela AW.Mensageria (`GATEWAY_INTERNAL_TOKEN`); sem ela, em desenvolvimento, o código aparece no log. Na área do cliente (`.../meus-agendamentos`), ele vê só o que a conta marcou (`agendamentos.conta_cliente_id`) e o das fichas com o e-mail dela; ficha achada pelo telefone não dá acesso. Detalhes em `app.salao/docs/lyra-proximos-passos.md`, Etapa 2.
 
 ## Testes
 

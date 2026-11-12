@@ -84,6 +84,48 @@ public sealed class PortalController(IPortalService portal) : ControllerBase
         }
     }
 
+    /// <summary>Próximos horários e histórico do cliente nesta empresa.</summary>
+    [HttpGet("meus-agendamentos")]
+    [Authorize(AuthenticationSchemes = TokensCliente.Esquema)]
+    public async Task<ActionResult<MeusAgendamentosDto>> MeusAgendamentos(string endereco, CancellationToken ct)
+    {
+        if (TokensCliente.ContaId(User) is not int contaId) return Unauthorized();
+        return await Tratar(() => portal.MeusAgendamentosAsync(contaId, endereco, ct));
+    }
+
+    /// <summary>Horários livres para remarcar: mesmos serviços, e o próprio horário atual não conta como ocupado.</summary>
+    [HttpGet("meus-agendamentos/{id:int}/horarios")]
+    [Authorize(AuthenticationSchemes = TokensCliente.Esquema)]
+    public async Task<ActionResult<HorariosLivresResponse>> HorariosRemarcar(
+        string endereco, int id, [FromQuery] DateOnly data, [FromQuery] int? profissionalId, CancellationToken ct)
+    {
+        if (TokensCliente.ContaId(User) is not int contaId) return Unauthorized();
+        if (data == default)
+        {
+            return BadRequest(new { error = "validation_error", message = "Informe a data (AAAA-MM-DD)." });
+        }
+        return await Tratar(() => portal.HorariosRemarcarAsync(contaId, endereco, id, data, profissionalId, ct));
+    }
+
+    [HttpPost("meus-agendamentos/{id:int}/cancelar")]
+    [Authorize(AuthenticationSchemes = TokensCliente.Esquema)]
+    public async Task<ActionResult<AgendamentoClienteDto>> Cancelar(
+        string endereco, int id, [FromBody] CancelarPortalRequest request, CancellationToken ct)
+    {
+        if (TokensCliente.ContaId(User) is not int contaId) return Unauthorized();
+        return await Tratar(() => portal.CancelarAsync(contaId, endereco, id, request, ct));
+    }
+
+    /// <summary>Devolve o novo horário; o anterior fica cancelado como "Remarcado".</summary>
+    [HttpPost("meus-agendamentos/{id:int}/remarcar")]
+    [Authorize(AuthenticationSchemes = TokensCliente.Esquema)]
+    public async Task<ActionResult<AgendamentoClienteDto>> Remarcar(
+        string endereco, int id, [FromBody] RemarcarPortalRequest request, CancellationToken ct)
+    {
+        if (TokensCliente.ContaId(User) is not int contaId) return Unauthorized();
+        return await Tratar(() => portal.RemarcarAsync(contaId, endereco, id, request, ct));
+    }
+
     private async Task<ActionResult<T>> Tratar<T>(Func<Task<T>> acao)
     {
         try
