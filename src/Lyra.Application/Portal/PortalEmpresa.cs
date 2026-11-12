@@ -32,6 +32,8 @@ public sealed partial class PortalEmpresa
     public int PassoMinutos { get; init; } = 30;
     /// <summary>Até quantas horas antes o cliente cancela ou remarca sozinho; null = só falando com a empresa.</summary>
     public int? PrazoAlteracaoHoras { get; init; } = 24;
+    /// <summary>O que o cliente marca ou remarca pelo site já entra confirmado, sem a recepção confirmar.</summary>
+    public bool ConfirmarAutomatico { get; init; }
     public List<int> ServicosOcultos { get; init; } = [];
     public List<int> ProfissionaisOcultos { get; init; } = [];
 
@@ -52,7 +54,7 @@ public sealed partial class PortalEmpresa
 
     public PortalConfigDto Dto(string? endereco) => new(
         Ativo, endereco, Apresentacao, AntecedenciaMinutos, JanelaDias, LimiteAbertos, PassoMinutos,
-        ServicosOcultos, ProfissionaisOcultos, PrazoAlteracaoHoras);
+        ServicosOcultos, ProfissionaisOcultos, PrazoAlteracaoHoras, ConfirmarAutomatico);
 
     /// <summary>Minúsculas, sem acento; nulo se vazio. Lança se o formato não serve.</summary>
     public static string? NormalizarEndereco(string? endereco)

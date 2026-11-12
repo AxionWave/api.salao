@@ -102,12 +102,14 @@ public sealed class AgendamentoService(LyraDbContext db, FilaNotificacoes fila, 
     }
 
     public async Task<AgendamentoDto> CriarAsync(
-        int empresaId, SalvarAgendamentoRequest request, CancellationToken ct, string? origem = null, int? contaClienteId = null)
+        int empresaId, SalvarAgendamentoRequest request, CancellationToken ct, string? origem = null, int? contaClienteId = null,
+        bool confirmado = false)
     {
         var v = await ValidarAsync(empresaId, request, atual: null, ct);
         await using var tx = await TravarAgendaAsync(empresaId, v.Profissional.Id, ct);
         var entidade = await NovoAgendamentoAsync(empresaId, v, ignorarId: null, remarcadoDeId: null, ct);
         entidade.ContaClienteId = contaClienteId;
+        if (confirmado) entidade.Status = StatusAgendamento.Confirmado;
         await fila.EnfileirarAsync(entidade, EventosNotificacao.AgendamentoCriado, ct, origem: origem);
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
@@ -116,7 +118,8 @@ public sealed class AgendamentoService(LyraDbContext db, FilaNotificacoes fila, 
     }
 
     public async Task<AgendamentoDto> RemarcarAsync(
-        int empresaId, int id, SalvarAgendamentoRequest request, CancellationToken ct, string? origem = null)
+        int empresaId, int id, SalvarAgendamentoRequest request, CancellationToken ct, string? origem = null,
+        bool confirmado = false)
     {
         var original = await db.Agendamentos.FirstOrDefaultAsync(x => x.Id == id && x.EmpresaId == empresaId, ct)
             ?? throw new KeyNotFoundException("Agendamento não encontrado.");
@@ -136,6 +139,7 @@ public sealed class AgendamentoService(LyraDbContext db, FilaNotificacoes fila, 
         await using var tx = await TravarAgendaAsync(empresaId, v.Profissional.Id, ct);
         var novo = await NovoAgendamentoAsync(empresaId, v, emAberto ? original.Id : null, original.Id, ct);
         novo.ContaClienteId = original.ContaClienteId;
+        if (confirmado) novo.Status = StatusAgendamento.Confirmado;
         if (emAberto)
         {
             original.Status = StatusAgendamento.Cancelado;

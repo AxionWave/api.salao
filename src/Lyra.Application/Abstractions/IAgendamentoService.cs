@@ -19,7 +19,8 @@ public interface IAgendamentoService
     /// <param name="origem">"cliente" quando foi marcado pelo portal: os avisos não têm autor da equipe.</param>
     /// <param name="contaClienteId">Conta do portal que marcou.</param>
     Task<AgendamentoDto> CriarAsync(
-        int empresaId, SalvarAgendamentoRequest request, CancellationToken ct, string? origem = null, int? contaClienteId = null);
+        int empresaId, SalvarAgendamentoRequest request, CancellationToken ct, string? origem = null, int? contaClienteId = null,
+        bool confirmado = false);
 
     Task<AgendamentoDto> AtualizarAsync(int empresaId, int id, SalvarAgendamentoRequest request, CancellationToken ct);
 
@@ -33,7 +34,8 @@ public interface IAgendamentoService
     /// </summary>
     /// <param name="origem">"cliente" quando o próprio cliente remarcou pelo portal.</param>
     Task<AgendamentoDto> RemarcarAsync(
-        int empresaId, int id, SalvarAgendamentoRequest request, CancellationToken ct, string? origem = null);
+        int empresaId, int id, SalvarAgendamentoRequest request, CancellationToken ct, string? origem = null,
+        bool confirmado = false);
 
     Task<HorariosLivresResponse> HorariosLivresAsync(int empresaId, HorariosLivresRequest request, CancellationToken ct);
 }

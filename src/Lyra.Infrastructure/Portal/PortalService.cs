@@ -263,7 +263,7 @@ public sealed class PortalService(
         {
             criado = await agendamentos.CriarAsync(c.EmpresaId,
                 new SalvarAgendamentoRequest(ficha.Id, servicoIds, profissionalId, inicio, observacoes),
-                ct, FilaNotificacoes.OrigemCliente, conta.Id);
+                ct, FilaNotificacoes.OrigemCliente, conta.Id, c.Portal.ConfirmarAutomatico);
         }
         catch (InvalidOperationException)
         {
@@ -359,7 +359,7 @@ public sealed class PortalService(
         {
             novo = await agendamentos.RemarcarAsync(c.EmpresaId, atual.Id,
                 new SalvarAgendamentoRequest(atual.ClienteId, servicoIds, profissionalId, inicio, atual.Observacoes),
-                ct, FilaNotificacoes.OrigemCliente);
+                ct, FilaNotificacoes.OrigemCliente, c.Portal.ConfirmarAutomatico);
         }
         catch (InvalidOperationException)
         {

@@ -13,6 +13,7 @@ namespace Lyra.Application.Portal;
 /// <param name="PrazoAlteracaoHoras">
 /// Até quantas horas antes o cliente cancela ou remarca pelo site (0 = até a hora marcada; null = não pode, só com a empresa).
 /// </param>
+/// <param name="ConfirmarAutomatico">O que o cliente marca ou remarca pelo site já entra confirmado.</param>
 public sealed record PortalConfigDto(
     bool Ativo,
     string? Endereco,
@@ -23,7 +24,8 @@ public sealed record PortalConfigDto(
     int PassoMinutos,
     IReadOnlyList<int> ServicosOcultos,
     IReadOnlyList<int> ProfissionaisOcultos,
-    int? PrazoAlteracaoHoras = 24);
+    int? PrazoAlteracaoHoras = 24,
+    bool ConfirmarAutomatico = false);
 
 public sealed record ItemPortalDto(int Id, string Nome);
 

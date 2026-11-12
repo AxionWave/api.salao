@@ -16,7 +16,7 @@ public sealed class PortalTests(ApiFixture api)
 
     private async Task<Portal> Ligar(
         Cenario? cenario = null, int antecedencia = 120, int janela = 60, int limite = 2,
-        int[]? servicosOcultos = null, int[]? profissionaisOcultos = null, int? prazo = 24)
+        int[]? servicosOcultos = null, int[]? profissionaisOcultos = null, int? prazo = 24, bool confirmar = false)
     {
         var c = cenario ?? await Cenario.Criar(api);
         var endereco = $"teste-{c.EmpresaId}";
@@ -32,6 +32,7 @@ public sealed class PortalTests(ApiFixture api)
             servicosOcultos = servicosOcultos ?? [],
             profissionaisOcultos = profissionaisOcultos ?? [],
             prazoAlteracaoHoras = prazo,
+            confirmarAutomatico = confirmar,
         }), 200);
         return new Portal(c, endereco, new Api(c.Http, ""));
     }
@@ -522,6 +523,41 @@ public sealed class PortalTests(ApiFixture api)
         Assert.Contains(sino.GetProperty("itens").EnumerateArray(),
             x => x.Str("evento") == "agendamento_remarcado" && x.Str("origem") == "cliente");
         Assert.Contains(api.Mensageria.Para(email), m => m.Campo("assunto").StartsWith("Horário alterado"));
+    }
+
+    [Fato]
+    public async Task Empresa_pode_fazer_o_online_entrar_confirmado()
+    {
+        var c = await Cenario.Criar(api);
+        var p = await Ligar(c);
+        await LigarEmails(p);
+        var email = NovoEmail();
+        var cliente = await Entrar(p, email, "Lia");
+        var aConfirmar = Exigir(await cliente.Post(p.Rota("/agendamentos"), Pedido([c.Retorno], c.Ana, c.Segunda, "09:00")), 201).Json;
+        Assert.Equal("agendado", aConfirmar.Str("status"));
+
+        p = await Ligar(c, confirmar: true);
+        var portal = Exigir(await c.Admin.Get("/api/salao/configuracao/portal"), 200).Json.GetProperty("portal");
+        Assert.True(portal.GetProperty("confirmarAutomatico").GetBoolean());
+        var confirmado = Exigir(await cliente.Post(p.Rota("/agendamentos"), Pedido([c.Retorno], c.Ana, c.Terca, "09:00")), 201).Json;
+        Assert.Equal("confirmado", confirmado.Str("status"));
+
+        // Remarcar pelo site também entra confirmado; o da equipe continua a confirmar.
+        var remarcado = Exigir(await cliente.Post(Meus(p, $"/{aConfirmar.Int("id")}/remarcar"),
+            new { inicio = Utc(c.Quarta, "09:00") }), 200).Json;
+        Assert.Equal("confirmado", remarcado.Str("status"));
+        var daEquipe = await c.AgendarOk(c.Joao, c.Ana, [c.Retorno], c.Quinta, "09:00");
+        Assert.Equal("agendado", Exigir(await c.Admin.Get($"/api/salao/agendamentos/{daEquipe}"), 200).Json.Str("status"));
+
+        // O e-mail não pede para confirmar o que já está confirmado.
+        await api.ProcessarFila();
+        var emails = api.Mensageria.Para(email);
+        var marcados = emails.Where(m => m.Campo("assunto").StartsWith("Horário marcado")).ToList();
+        Assert.Equal(2, marcados.Count);
+        Assert.Contains("/c/", marcados[0].Campo("texto"));
+        Assert.DoesNotContain("/c/", marcados[1].Campo("texto"));
+        Assert.Contains("marcado e confirmado", marcados[1].Campo("texto"));
+        Assert.DoesNotContain("/c/", emails.Single(m => m.Campo("assunto").StartsWith("Horário alterado")).Campo("texto"));
     }
 
     [Fato]

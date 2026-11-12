@@ -54,6 +54,7 @@ public sealed class PortalConfigService(LyraDbContext db, LeitorEmpresa empresas
             LimiteAbertos = request.LimiteAbertos,
             PassoMinutos = request.PassoMinutos,
             PrazoAlteracaoHoras = request.PrazoAlteracaoHoras,
+            ConfirmarAutomatico = request.ConfirmarAutomatico,
             ServicosOcultos = (request.ServicosOcultos ?? []).Distinct().Where(servicos.Contains).Order().ToList(),
             ProfissionaisOcultos = (request.ProfissionaisOcultos ?? []).Distinct().Where(profissionais.Contains).Order().ToList(),
         };

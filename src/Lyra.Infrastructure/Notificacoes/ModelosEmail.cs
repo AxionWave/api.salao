@@ -41,7 +41,7 @@ public static partial class ModelosEmail
                 antes is not null
                     ? $"Seu horário em {nomeEmpresa} passou de {antes.Longo} para {quando.Longo}."
                     : $"Seu horário em {nomeEmpresa} foi alterado para {quando.Longo}.",
-                linkConfirmar),
+                d.Confirmado ? null : linkConfirmar),
             EventosNotificacao.AgendamentoCancelado => (
                 $"Horário cancelado: {quando.Curto} – {nomeEmpresa}",
                 "Seu horário foi cancelado",
@@ -56,8 +56,10 @@ public static partial class ModelosEmail
             _ => (
                 $"Horário marcado: {quando.Curto} – {nomeEmpresa}",
                 "Seu horário está marcado",
-                $"Seu horário em {nomeEmpresa} está marcado para {quando.Longo}.",
-                linkConfirmar),
+                d.Confirmado
+                    ? $"Seu horário em {nomeEmpresa} está marcado e confirmado para {quando.Longo}."
+                    : $"Seu horário em {nomeEmpresa} está marcado para {quando.Longo}.",
+                d.Confirmado ? null : linkConfirmar),
         };
 
         var itens = d.Itens.Count > 0
