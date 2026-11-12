@@ -50,6 +50,7 @@ public static class DependencyInjection
             services.AddScoped<ICanalNotificacao>(sp => sp.GetRequiredService<CanalEmail>());
         }
         services.AddHttpClient<EmailCodigoAcesso>(c => c.Timeout = TimeSpan.FromSeconds(20));
+        services.AddHttpClient<PreferenciasMensageria>(c => c.Timeout = TimeSpan.FromSeconds(10));
         services.AddSingleton<ChaveCodigos>();
         services.AddScoped<IPortalService, PortalService>();
         services.AddScoped<IPortalConfigService, PortalConfigService>();

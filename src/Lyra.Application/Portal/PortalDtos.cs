@@ -120,6 +120,17 @@ public sealed record CancelarPortalRequest(string? Motivo);
 /// <param name="ProfissionalId">Nulo = qualquer profissional livre no horário.</param>
 public sealed record RemarcarPortalRequest(int? ProfissionalId, DateTime Inicio);
 
+/// <summary>Avisos por e-mail desta empresa para o e-mail da conta.</summary>
+/// <param name="Disponivel">False quando a entrega de e-mails não está ligada neste ambiente; nada se altera.</param>
+/// <param name="EmpresaEnvia">A empresa manda avisos por e-mail (Configurações → Avisos e mensagens).</param>
+/// <param name="ReceberEmails">Os próximos avisos da empresa saem para o e-mail da conta.</param>
+/// <param name="Bloqueio">
+/// <c>devolvido</c> ou <c>reclamacao</c> (marcado como spam): ninguém manda para este endereço e o site não desfaz.
+/// </param>
+public sealed record PreferenciasClienteDto(bool Disponivel, bool EmpresaEnvia, bool ReceberEmails, string? Bloqueio);
+
+public sealed record SalvarPreferenciasRequest(bool ReceberEmails);
+
 /// <summary>Configuração do portal pela equipe.</summary>
 public interface IPortalConfigService
 {
@@ -143,6 +154,8 @@ public interface IPortalService
         int contaId, string endereco, int agendamentoId, DateOnly data, int? profissionalId, CancellationToken ct);
     Task<AgendamentoClienteDto> CancelarAsync(int contaId, string endereco, int agendamentoId, CancelarPortalRequest request, CancellationToken ct);
     Task<AgendamentoClienteDto> RemarcarAsync(int contaId, string endereco, int agendamentoId, RemarcarPortalRequest request, CancellationToken ct);
+    Task<PreferenciasClienteDto> PreferenciasAsync(int contaId, string endereco, CancellationToken ct);
+    Task<PreferenciasClienteDto> SalvarPreferenciasAsync(int contaId, string endereco, SalvarPreferenciasRequest request, CancellationToken ct);
 }
 
 /// <summary>Token do cliente no portal: chave e audiência próprias, não serve nas rotas da equipe.</summary>

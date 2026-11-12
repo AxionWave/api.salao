@@ -68,6 +68,23 @@ public sealed class PortalController(IPortalService portal) : ControllerBase
         return await Tratar(() => portal.SalvarContaAsync(contaId, endereco, request, ct));
     }
 
+    [HttpGet("conta/preferencias")]
+    [Authorize(AuthenticationSchemes = TokensCliente.Esquema)]
+    public async Task<ActionResult<PreferenciasClienteDto>> Preferencias(string endereco, CancellationToken ct)
+    {
+        if (TokensCliente.ContaId(User) is not int contaId) return Unauthorized();
+        return await Tratar(() => portal.PreferenciasAsync(contaId, endereco, ct));
+    }
+
+    [HttpPut("conta/preferencias")]
+    [Authorize(AuthenticationSchemes = TokensCliente.Esquema)]
+    public async Task<ActionResult<PreferenciasClienteDto>> SalvarPreferencias(
+        string endereco, [FromBody] SalvarPreferenciasRequest request, CancellationToken ct)
+    {
+        if (TokensCliente.ContaId(User) is not int contaId) return Unauthorized();
+        return await Tratar(() => portal.SalvarPreferenciasAsync(contaId, endereco, request, ct));
+    }
+
     [HttpPost("agendamentos")]
     [Authorize(AuthenticationSchemes = TokensCliente.Esquema)]
     public async Task<ActionResult<AgendamentoPortalDto>> Agendar(string endereco, [FromBody] AgendarPortalRequest request, CancellationToken ct)

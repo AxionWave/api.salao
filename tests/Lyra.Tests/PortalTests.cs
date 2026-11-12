@@ -561,6 +561,54 @@ public sealed class PortalTests(ApiFixture api)
     }
 
     [Fato]
+    public async Task Cliente_liga_e_desliga_os_avisos_por_email_da_empresa()
+    {
+        var p = await Ligar();
+        var email = NovoEmail();
+        var cliente = await Entrar(p, email);
+        var rota = p.Rota("/conta/preferencias");
+        Assert.Equal(401, (await p.Anonimo.Get(rota)).Codigo);
+
+        var pref = Exigir(await cliente.Get(rota), 200).Json;
+        Assert.True(pref.GetProperty("disponivel").GetBoolean());
+        Assert.False(pref.GetProperty("empresaEnvia").GetBoolean());
+        Assert.True(pref.GetProperty("receberEmails").GetBoolean());
+
+        await LigarEmails(p);
+        pref = Exigir(await cliente.Put(rota, new { receberEmails = false }), 200).Json;
+        Assert.True(pref.GetProperty("empresaEnvia").GetBoolean());
+        Assert.False(pref.GetProperty("receberEmails").GetBoolean());
+        Assert.True(pref.Nulo("bloqueio"));
+        Assert.Contains($"{p.C.EmpresaId}|{email}", api.Mensageria.Saidas.Keys);
+
+        pref = Exigir(await cliente.Put(rota, new { receberEmails = true }), 200).Json;
+        Assert.True(pref.GetProperty("receberEmails").GetBoolean());
+
+        // E-mail que voltou: o site mostra o motivo e não desfaz.
+        api.Mensageria.Descadastrados.TryAdd(email, 0);
+        try
+        {
+            pref = Exigir(await cliente.Put(rota, new { receberEmails = true }), 200).Json;
+            Assert.False(pref.GetProperty("receberEmails").GetBoolean());
+            Assert.Equal("devolvido", pref.Str("bloqueio"));
+        }
+        finally
+        {
+            api.Mensageria.Descadastrados.TryRemove(email, out _);
+        }
+
+        api.Mensageria.MensageriaFora = true;
+        try
+        {
+            Assert.Equal(409, (await cliente.Get(rota)).Codigo);
+        }
+        finally
+        {
+            api.Mensageria.MensageriaFora = false;
+        }
+    }
+
+    [Fato]
     public async Task Area_mostra_so_o_que_e_da_conta_ou_do_email_dela()
     {
         var p = await Ligar();

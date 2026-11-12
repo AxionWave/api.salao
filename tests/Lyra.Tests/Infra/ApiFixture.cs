@@ -83,6 +83,7 @@ public sealed class ApiFixture : IAsyncLifetime
                 s.AddSingleton<ICanalNotificacao>(Canal);
                 s.AddHttpClient<CanalEmail>().ConfigurePrimaryHttpMessageHandler(() => Mensageria);
                 s.AddHttpClient<EmailCodigoAcesso>().ConfigurePrimaryHttpMessageHandler(() => Mensageria);
+                s.AddHttpClient<PreferenciasMensageria>().ConfigurePrimaryHttpMessageHandler(() => Mensageria);
                 s.AddHttpClient<ClienteWebPush>().ConfigurePrimaryHttpMessageHandler(() => Push);
             }));
         _ = factory.Server;

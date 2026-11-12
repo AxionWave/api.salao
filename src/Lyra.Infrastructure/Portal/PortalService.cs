@@ -36,7 +36,8 @@ public sealed class PortalService(
     LeitorEmpresa empresas,
     EmailCodigoAcesso emailCodigo,
     ChaveCodigos chave,
-    ITokensCliente tokens) : IPortalService
+    ITokensCliente tokens,
+    PreferenciasMensageria preferencias) : IPortalService
 {
     public const int ValidadeCodigoMinutos = 10;
     public const int MaxTentativas = 5;
@@ -218,6 +219,46 @@ public sealed class PortalService(
         conta.Telefone = telefone;
         await db.SaveChangesAsync(ct);
         return Dto(conta);
+    }
+
+    public async Task<PreferenciasClienteDto> PreferenciasAsync(int contaId, string endereco, CancellationToken ct)
+    {
+        var c = await ContextoAsync(endereco, ct);
+        var conta = await ContaAsync(contaId, ct);
+        var envia = await EmpresaEnviaEmailsAsync(c, ct);
+        if (!preferencias.Disponivel) return new PreferenciasClienteDto(false, envia, true, null);
+        return Dto(envia, await MensageriaAsync(() => preferencias.ObterAsync(c.EmpresaId, conta.Email, ct)));
+    }
+
+    public async Task<PreferenciasClienteDto> SalvarPreferenciasAsync(
+        int contaId, string endereco, SalvarPreferenciasRequest request, CancellationToken ct)
+    {
+        var c = await ContextoAsync(endereco, ct);
+        var conta = await ContaAsync(contaId, ct);
+        if (!preferencias.Disponivel)
+        {
+            throw new InvalidOperationException("Não dá para mudar os avisos por e-mail agora. Tente mais tarde.");
+        }
+        var envia = await EmpresaEnviaEmailsAsync(c, ct);
+        return Dto(envia, await MensageriaAsync(() => preferencias.DefinirAsync(c.EmpresaId, conta.Email, request.ReceberEmails, ct)));
+    }
+
+    private Task<bool> EmpresaEnviaEmailsAsync(Contexto c, CancellationToken ct) =>
+        db.EmpresaConfigs.AnyAsync(x => x.EmpresaId == c.EmpresaId && x.EnviarEmails, ct);
+
+    private static PreferenciasClienteDto Dto(bool empresaEnvia, PreferenciasMensageria.Situacao s) =>
+        new(true, empresaEnvia, s.Bloqueio is null && !s.PediuParaSair, s.Bloqueio);
+
+    private static async Task<PreferenciasMensageria.Situacao> MensageriaAsync(Func<Task<PreferenciasMensageria.Situacao>> chamada)
+    {
+        try
+        {
+            return await chamada();
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            throw new InvalidOperationException("Não deu para consultar os avisos por e-mail agora. Tente de novo em instantes.", ex);
+        }
     }
 
     public async Task<AgendamentoPortalDto> AgendarAsync(int contaId, string endereco, AgendarPortalRequest request, CancellationToken ct)
